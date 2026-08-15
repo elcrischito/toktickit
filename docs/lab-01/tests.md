@@ -1,40 +1,21 @@
 # Lab 1 — Tests
 
-TokTickIT — vertical slice: `/api/health` and `/api/categories`.
+Test File: `tests/lab-01/`
 
-## Backend (Supertest + Vitest)
+| Test ID | Tool      | Test Description                                      |
+|---------|-----------|--------------------------------------------------------|
+| API-01  | Supertest | Health endpoint returns 200 and expected JSON           |
+| API-02  | Supertest | Categories endpoint returns the four seeded categories  |
+| UI-01   | Vitest    | TokTickIT heading renders                                |
+| UI-02   | Vitest    | Loading state changes to system status and category list on success |
+| UI-03   | Vitest    | API failure displays a useful "Offline" error message   |
 
-### `server/tests/lab-01/health.test.ts`
-**GET /api/health**
-- *returns 200 with status ok and the service name*
-  Asserts the response status is `200` and the body strictly equals `{ status: "ok", service: "TokTickIT API" }`.
+## Test file locations
 
-### `server/tests/lab-01/categories.test.ts`
-**GET /api/categories**
-- *returns the four seeded categories in id order*
-  Asserts the response status is `200` and the category names, in order, equal:
-  `["Account and Access", "Hardware", "Software", "Network"]`.
+- `server/tests/lab-01/health.test.ts` → API-01
+- `server/tests/lab-01/categories.test.ts` → API-02
+- `client/tests/lab-01/App.test.tsx` → UI-01, UI-02, UI-03
 
-## Frontend (Vitest + React Testing Library)
-
-### `client/tests/lab-01/App.test.tsx`
-**App**
-- *renders the TokTickIT heading*
-  Renders `<App />` and asserts the text "TokTickIT" is present.
-
-- *shows Online and the seeded categories on success*
-  Mocks `api.checkSystem` to resolve with `{ online: true, categories: [...] }` (4 seeded categories), clicks "Check System", and asserts "Online" and "Hardware" appear on screen.
-
-- *shows an Offline error message when the API is unavailable*
-  Mocks `api.checkSystem` to reject with an error, clicks "Check System", and asserts "Offline" appears on screen (error state).
-
-## Summary
-
-| Layer    | File                  | Tests |
-|----------|-----------------------|-------|
-| Backend  | health.test.ts        | 1     |
-| Backend  | categories.test.ts    | 1     |
-| Frontend | App.test.tsx          | 3     |
-| **Total**|                        | **5** |
+## Result
 
 All 5 tests pass locally (`npm test` in `server/` and `client/`).
