@@ -12,15 +12,22 @@ datasource db {
 
 // ---------------------------------------------------------------------------
 // Issue 3 — Create and seed IT request categories
-// Define a Category model with:
-//   id        Int      @id @default(autoincrement())
-//   name      String   @unique
-//   createdAt DateTime @default(now())
-// Then run:  npx prisma migrate dev --name init
-// TODO(Issue 3): add the Category model below.
 model Category {
   id        Int      @id @default(autoincrement())
   name      String   @unique
   createdAt DateTime @default(now())
 }
+
+// ---------------------------------------------------------------------------
+// Issue 5 — Development Requester context (Lab 2)
+// Temporary Lab 2 testing identity, NOT authentication. Replaced by a real
+// User/session model when authentication is introduced in Lab 3.
+model DevRequester {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
 // ---------------------------------------------------------------------------
