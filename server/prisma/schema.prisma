@@ -12,15 +12,24 @@ datasource db {
 
 // ---------------------------------------------------------------------------
 // Issue 3 — Create and seed IT request categories
-// Define a Category model with:
-//   id        Int      @id @default(autoincrement())
-//   name      String   @unique
-//   createdAt DateTime @default(now())
-// Then run:  npx prisma migrate dev --name init
-// TODO(Issue 3): add the Category model below.
+// isActive added in Lab 2 (Issue 7) so Ticket creation can reference only
+// active Categories (BR-09).
 model Category {
   id        Int      @id @default(autoincrement())
   name      String   @unique
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 }
+
+// ---------------------------------------------------------------------------
+// Issue 7 — Related Systems reference data (Lab 2)
+// Identifies the specific service, application, device, or platform
+// affected by a Ticket (e.g. "Corporate Laptop", "Campus Wi-Fi").
+model RelatedSystem {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
 // ---------------------------------------------------------------------------
