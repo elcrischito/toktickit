@@ -2,6 +2,20 @@ import { test, expect, Page } from "@playwright/test";
 import path from "path";
 import fs from "fs";
 
+const FIXTURE_DIR = path.join(process.cwd(), "tests-e2e", "fixtures");
+const FIXTURE_FILE = path.join(FIXTURE_DIR, "test-attachment.png");
+
+test.beforeAll(() => {
+  fs.mkdirSync(FIXTURE_DIR, { recursive: true });
+  if (!fs.existsSync(FIXTURE_FILE)) {
+    const tinyPng = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      "base64"
+    );
+    fs.writeFileSync(FIXTURE_FILE, tinyPng);
+  }
+});
+
 // Issue 7 — Visual/responsive evidence capture (Lab 2).
 // Generates the screenshots required by the Lab 2 handout under
 // artifacts/lab-02/screenshots/<screen>/<viewport>-<state>.png
@@ -136,12 +150,19 @@ test.describe("Lab 2 screenshot capture", () => {
     await page.locator("#summary").fill(uniqueSummary);
     await page.locator("#description").fill("Ticket created to capture the Ticket Detail screenshot.");
     await page.getByRole("button", { name: "Submit Ticket" }).click();
+    await expect(page.getByText(/Ticket TKT-\d{4}-\d{6} created/)).toBeVisible({ timeout: 15000 });
     await page.getByRole("button", { name: "View My Tickets" }).click();
     await page.getByPlaceholder("Search by ticket number or summary…").fill(uniqueSummary);
     const ticketRow = page.locator("tbody tr", { hasText: uniqueSummary });
     await expect(ticketRow).toBeVisible({ timeout: 10000 });
     await ticketRow.click();
     await expect(page.getByRole("heading", { name: "Attachments" })).toBeVisible();
+
+    // Upload a real attachment so this screenshot shows the attachment
+    // lifecycle instead of an empty "No attachments yet." state.
+    await page.setInputFiles('input[type="file"]', FIXTURE_FILE);
+    await expect(page.getByText("test-attachment.png")).toBeVisible({ timeout: 10000 });
+
     await page.screenshot({
       path: outPath("ticket-detail", `${testInfo.project.name.toLowerCase()}-owned-ticket.png`),
       fullPage: true,
