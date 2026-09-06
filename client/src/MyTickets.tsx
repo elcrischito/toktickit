@@ -28,11 +28,12 @@ const PRIORITY_BADGE: Record<string, string> = {
 
 interface Props {
   onCreateTicket: () => void;
+  onOpenTicket: (ticketId: number) => void;
 }
 
 // Issue 9 — My Tickets (Lab 2): search, filter, sort, paginate the current
 // Requester's own Tickets.
-export default function MyTickets({ onCreateTicket }: Props) {
+export default function MyTickets({ onCreateTicket, onOpenTicket }: Props) {
   const { requester } = useRequester();
   const [state, setState] = useState<LoadState>("loading");
   const [tickets, setTickets] = useState<TicketListItem[]>([]);
@@ -246,7 +247,12 @@ export default function MyTickets({ onCreateTicket }: Props) {
               </thead>
               <tbody>
                 {tickets.map((t) => (
-                  <tr key={t.id}>
+                  <tr
+                    key={t.id}
+                    role="button"
+                    onClick={() => onOpenTicket(t.id)}
+                    style={{ cursor: "pointer" }}
+                  >
                     <td className="fw-semibold">{t.ticketNumber}</td>
                     <td>{new Date(t.createdAt).toLocaleDateString()}</td>
                     <td>{t.summary}</td>

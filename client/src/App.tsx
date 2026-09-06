@@ -3,15 +3,22 @@ import { RequesterProvider, useRequester } from "./RequesterContext.js";
 import RequesterSelection from "./RequesterSelection.js";
 import CreateTicket from "./CreateTicket.js";
 import MyTickets from "./MyTickets.js";
+import TicketDetail from "./TicketDetail.js";
 
-type View = "home" | "create-ticket";
+type View = "home" | "create-ticket" | "ticket-detail";
 
 function AppShell() {
   const { requester, changeRequester } = useRequester();
   const [view, setView] = useState<View>("home");
+  const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
 
   if (!requester) {
     return <RequesterSelection />;
+  }
+
+  function openTicket(ticketId: number) {
+    setSelectedTicketId(ticketId);
+    setView("ticket-detail");
   }
 
   return (
@@ -39,7 +46,12 @@ function AppShell() {
       </nav>
 
       {view === "create-ticket" && <CreateTicket onViewMyTickets={() => setView("home")} />}
-      {view === "home" && <MyTickets onCreateTicket={() => setView("create-ticket")} />}
+      {view === "home" && (
+        <MyTickets onCreateTicket={() => setView("create-ticket")} onOpenTicket={openTicket} />
+      )}
+      {view === "ticket-detail" && selectedTicketId !== null && (
+        <TicketDetail ticketId={selectedTicketId} onBack={() => setView("home")} />
+      )}
     </div>
   );
 }

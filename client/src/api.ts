@@ -177,3 +177,81 @@ export async function fetchTickets(
 
   return res.json();
 }
+export interface AttachmentItem {
+  id: number;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  createdAt: string;
+}
+
+export interface TicketDetail {
+  id: number;
+  ticketNumber: string;
+  summary: string;
+  description: string;
+  categoryName: string;
+  relatedSystemName: string;
+  requesterName: string;
+  requestedPriority: "LOW" | "MEDIUM" | "HIGH";
+  itPriority: "LOW" | "MEDIUM" | "HIGH" | null;
+  currentStatus: string;
+  createdAt: string;
+  updatedAt: string;
+  attachments: AttachmentItem[];
+}
+
+// Issue 6 — Requester Ticket Detail + Attachment lifecycle.
+export async function fetchTicketDetail(
+  requesterId: number,
+  ticketId: number
+): Promise<TicketDetail> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}`, {
+    headers: { "x-requester-id": String(requesterId) },
+  });
+  if (!res.ok) {
+    throw new Error("Unable to load ticket details.");
+  }
+  return res.json();
+}
+
+export async function uploadAttachment(
+  requesterId: number,
+  ticketId: number,
+  file: File
+): Promise<AttachmentItem> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/attachments`, {
+    method: "POST",
+    headers: { "x-requester-id": String(requesterId) },
+    body: formData,
+  });
+
+  if (!res.ok) {
+    throw new Error("Unable to upload attachment.");
+  }
+  return res.json();
+}
+
+export function getAttachmentDownloadUrl(ticketId: number, attachmentId: number): string {
+  return `${API_URL}/api/tickets/${ticketId}/attachments/${attachmentId}`;
+}
+
+export async function removeAttachment(
+  requesterId: number,
+  ticketId: number,
+  attachmentId: number
+): Promise<void> {
+  const res = await fetch(
+    `${API_URL}/api/tickets/${ticketId}/attachments/${attachmentId}`,
+    {
+      method: "DELETE",
+      headers: { "x-requester-id": String(requesterId) },
+    }
+  );
+  if (!res.ok) {
+    throw new Error("Unable to remove attachment.");
+  }
+}
