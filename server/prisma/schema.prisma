@@ -69,6 +69,7 @@ model Ticket {
   currentStatus     TicketStatus      @default(NEW)
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
+    attachments       Attachment[]
 
   @@index([requesterId])
   @@index([currentStatus])
@@ -77,3 +78,18 @@ model Ticket {
 }
 
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Issue 6 — Attachment lifecycle (upload, download, soft-remove)
+model Attachment {
+  id           Int      @id @default(autoincrement())
+  ticketId     Int
+  ticket       Ticket   @relation(fields: [ticketId], references: [id])
+  filename     String
+  originalName String
+  mimeType     String
+  size         Int
+  isRemoved    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  @@index([ticketId])
+}

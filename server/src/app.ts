@@ -1,10 +1,25 @@
 import express, { Request, Response } from "express";
 import cors from "cors";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 import { getPrisma } from "./prisma.js";
 
 export const app = express();
 app.use(cors());
 app.use(express.json());
+
+const UPLOAD_DIR = path.join(process.cwd(), "uploads");
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+  filename: (_req, file, cb) => {
+    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    cb(null, `${unique}${path.extname(file.originalname)}`);
+  },
+});
+const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
 
 // ---------------------------------------------------------------------------
 app.get("/api/health", (_req: Request, res: Response) => {
@@ -211,6 +226,169 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
     });
   } catch {
     res.status(500).json({ error: { code: "SERVER_ERROR", message: "Unable to load tickets." } });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Issue 6 — Requester Ticket Detail + Attachment lifecycle
+
+app.get("/api/tickets/:id", async (req: Request, res: Response) => {
+  const requesterId = Number(req.header("x-requester-id"));
+  if (!requesterId || Number.isNaN(requesterId)) {
+    return res.status(400).json({
+      error: { code: "INVALID_REQUESTER", message: "A valid requester context is required." },
+    });
+  }
+  const ticketId = Number(req.params.id);
+  if (!ticketId || Number.isNaN(ticketId)) {
+    return res.status(400).json({
+      error: { code: "INVALID_TICKET_ID", message: "Invalid ticket id." },
+    });
+  }
+
+  try {
+    const ticket = await getPrisma().ticket.findUnique({
+      where: { id: ticketId },
+      include: {
+        category: { select: { name: true } },
+        relatedSystem: { select: { name: true } },
+        requester: { select: { name: true } },
+        attachments: { where: { isRemoved: false }, orderBy: { createdAt: "desc" } },
+      },
+    });
+
+    if (!ticket || ticket.requesterId !== requesterId) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found." } });
+    }
+
+    res.status(200).json({
+      id: ticket.id,
+      ticketNumber: ticket.ticketNumber,
+      summary: ticket.summary,
+      description: ticket.description,
+      categoryName: ticket.category.name,
+      relatedSystemName: ticket.relatedSystem.name,
+      requesterName: ticket.requester.name,
+      requestedPriority: ticket.requestedPriority,
+      itPriority: ticket.itPriority,
+      currentStatus: ticket.currentStatus,
+      createdAt: ticket.createdAt,
+      updatedAt: ticket.updatedAt,
+      attachments: ticket.attachments.map((a) => ({
+        id: a.id,
+        originalName: a.originalName,
+        mimeType: a.mimeType,
+        size: a.size,
+        createdAt: a.createdAt,
+      })),
+    });
+  } catch {
+    res.status(500).json({ error: { code: "SERVER_ERROR", message: "Unable to load ticket." } });
+  }
+});
+
+app.post(
+  "/api/tickets/:id/attachments",
+  upload.single("file"),
+  async (req: Request, res: Response) => {
+    const requesterId = Number(req.header("x-requester-id"));
+    if (!requesterId || Number.isNaN(requesterId)) {
+      return res.status(400).json({
+        error: { code: "INVALID_REQUESTER", message: "A valid requester context is required." },
+      });
+    }
+    const ticketId = Number(req.params.id);
+    if (!req.file) {
+      return res.status(400).json({ error: { code: "NO_FILE", message: "No file was uploaded." } });
+    }
+
+    try {
+      const ticket = await getPrisma().ticket.findUnique({ where: { id: ticketId } });
+      if (!ticket || ticket.requesterId !== requesterId) {
+        fs.unlinkSync(req.file.path);
+        return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found." } });
+      }
+
+      const attachment = await getPrisma().attachment.create({
+        data: {
+          ticketId,
+          filename: req.file.filename,
+          originalName: req.file.originalname,
+          mimeType: req.file.mimetype,
+          size: req.file.size,
+        },
+      });
+
+      res.status(201).json({
+        id: attachment.id,
+        originalName: attachment.originalName,
+        mimeType: attachment.mimeType,
+        size: attachment.size,
+        createdAt: attachment.createdAt,
+      });
+    } catch {
+      res.status(500).json({ error: { code: "SERVER_ERROR", message: "Unable to upload attachment." } });
+    }
+  }
+);
+
+app.get("/api/tickets/:id/attachments/:attachmentId", async (req: Request, res: Response) => {
+  const requesterId = Number(req.header("x-requester-id"));
+  if (!requesterId || Number.isNaN(requesterId)) {
+    return res.status(400).json({
+      error: { code: "INVALID_REQUESTER", message: "A valid requester context is required." },
+    });
+  }
+  const ticketId = Number(req.params.id);
+  const attachmentId = Number(req.params.attachmentId);
+
+  try {
+    const attachment = await getPrisma().attachment.findUnique({ where: { id: attachmentId } });
+    if (!attachment || attachment.ticketId !== ticketId || attachment.isRemoved) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "Attachment not found." } });
+    }
+
+    const ticket = await getPrisma().ticket.findUnique({ where: { id: ticketId } });
+    if (!ticket || ticket.requesterId !== requesterId) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "Attachment not found." } });
+    }
+
+    const filePath = path.join(UPLOAD_DIR, attachment.filename);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: { code: "FILE_MISSING", message: "File no longer exists on disk." } });
+    }
+
+    res.download(filePath, attachment.originalName);
+  } catch {
+    res.status(500).json({ error: { code: "SERVER_ERROR", message: "Unable to download attachment." } });
+  }
+});
+
+app.delete("/api/tickets/:id/attachments/:attachmentId", async (req: Request, res: Response) => {
+  const requesterId = Number(req.header("x-requester-id"));
+  if (!requesterId || Number.isNaN(requesterId)) {
+    return res.status(400).json({
+      error: { code: "INVALID_REQUESTER", message: "A valid requester context is required." },
+    });
+  }
+  const ticketId = Number(req.params.id);
+  const attachmentId = Number(req.params.attachmentId);
+
+  try {
+    const attachment = await getPrisma().attachment.findUnique({ where: { id: attachmentId } });
+    if (!attachment || attachment.ticketId !== ticketId) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "Attachment not found." } });
+    }
+
+    const ticket = await getPrisma().ticket.findUnique({ where: { id: ticketId } });
+    if (!ticket || ticket.requesterId !== requesterId) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "Attachment not found." } });
+    }
+
+    await getPrisma().attachment.update({ where: { id: attachmentId }, data: { isRemoved: true } });
+    res.status(200).json({ id: attachmentId, isRemoved: true });
+  } catch {
+    res.status(500).json({ error: { code: "SERVER_ERROR", message: "Unable to remove attachment." } });
   }
 });
 
