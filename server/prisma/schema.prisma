@@ -12,15 +12,68 @@ datasource db {
 
 // ---------------------------------------------------------------------------
 // Issue 3 — Create and seed IT request categories
-// Define a Category model with:
-//   id        Int      @id @default(autoincrement())
-//   name      String   @unique
-//   createdAt DateTime @default(now())
-// Then run:  npx prisma migrate dev --name init
-// TODO(Issue 3): add the Category model below.
 model Category {
   id        Int      @id @default(autoincrement())
   name      String   @unique
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
+  tickets   Ticket[]
 }
+
+// ---------------------------------------------------------------------------
+// Issue 5 — Development Requester context (Lab 2)
+model DevRequester {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  tickets   Ticket[]
+}
+
+// ---------------------------------------------------------------------------
+// Issue 7 — Related Systems reference data (Lab 2)
+model RelatedSystem {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  tickets   Ticket[]
+}
+
+// ---------------------------------------------------------------------------
+// Issue 8 — Ticket creation (Lab 2)
+enum RequestedPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum TicketStatus {
+  NEW
+}
+
+model Ticket {
+  id                Int               @id @default(autoincrement())
+  ticketNumber      String            @unique
+  requesterId       Int
+  requester         DevRequester      @relation(fields: [requesterId], references: [id])
+  categoryId        Int
+  category          Category          @relation(fields: [categoryId], references: [id])
+  relatedSystemId   Int
+  relatedSystem     RelatedSystem     @relation(fields: [relatedSystemId], references: [id])
+  summary           String
+  description       String
+  requestedPriority RequestedPriority
+  itPriority        RequestedPriority?
+  currentStatus     TicketStatus      @default(NEW)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([requesterId])
+  @@index([currentStatus])
+  @@index([categoryId])
+  @@index([createdAt])
+}
+
 // ---------------------------------------------------------------------------
