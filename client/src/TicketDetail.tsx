@@ -17,7 +17,9 @@ const PRIORITY_BADGE: Record<string, string> = {
   HIGH: "bg-danger-subtle text-danger",
 };
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // BR-14
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"]; // BR-13
+const MAX_ACTIVE_ATTACHMENTS = 5; // BR-15
 
 interface Props {
   ticketId: number;
@@ -56,8 +58,13 @@ export default function TicketDetail({ ticketId, onBack }: Props) {
 
     setUploadError(null);
 
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      setUploadError("Only JPG, PNG, WEBP, and PDF files are allowed.");
+      return;
+    }
+
     if (file.size > MAX_FILE_SIZE) {
-      setUploadError("File is too large. Maximum size is 10 MB.");
+      setUploadError("File is too large. Maximum size is 5 MB.");
       return;
     }
 
@@ -74,8 +81,21 @@ export default function TicketDetail({ ticketId, onBack }: Props) {
 
   function handleRemove(attachmentId: number) {
     if (!requester) return;
+
+    const reason = window.prompt(
+      "Please provide a reason for removing this attachment (3-200 characters):"
+    );
+    if (reason === null) return;
+
+    const trimmedReason = reason.trim();
+    if (trimmedReason.length < 3 || trimmedReason.length > 200) {
+      setUploadError("Removal reason must be between 3 and 200 characters.");
+      return;
+    }
+
+    setUploadError(null);
     setRemovingId(attachmentId);
-    removeAttachment(requester.id, ticketId, attachmentId)
+    removeAttachment(requester.id, ticketId, attachmentId, trimmedReason)
       .then(() => {
         setTicket((prev) =>
           prev
@@ -123,6 +143,8 @@ export default function TicketDetail({ ticketId, onBack }: Props) {
   if (!ticket) {
     return null;
   }
+
+  const atAttachmentLimit = ticket.attachments.length >= MAX_ACTIVE_ATTACHMENTS;
 
   return (
     <div className="container py-5" style={{ maxWidth: 900 }}>
@@ -188,10 +210,24 @@ export default function TicketDetail({ ticketId, onBack }: Props) {
       <h2 className="h5 mb-3">Attachments</h2>
 
       <div className="mb-3">
-        <label className="btn btn-success btn-sm">
+        <label className={`btn btn-success btn-sm ${atAttachmentLimit ? "disabled" : ""}`}>
           {isUploading ? "Uploading…" : "+ Upload File"}
-          <input type="file" hidden onChange={handleFileChange} disabled={isUploading} />
+          <input
+            type="file"
+            hidden
+            accept=".jpg,.jpeg,.png,.webp,.pdf"
+            onChange={handleFileChange}
+            disabled={isUploading || atAttachmentLimit}
+          />
         </label>
+        <div className="text-muted small mt-1">
+          JPG, PNG, WEBP, or PDF · max 5 MB · up to {MAX_ACTIVE_ATTACHMENTS} attachments per ticket
+        </div>
+        {atAttachmentLimit && (
+          <div className="text-warning small mt-1">
+            Maximum of {MAX_ACTIVE_ATTACHMENTS} active attachments reached.
+          </div>
+        )}
         {uploadError && <div className="text-danger small mt-2">{uploadError}</div>}
       </div>
 
