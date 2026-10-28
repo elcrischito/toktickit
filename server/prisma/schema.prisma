@@ -1,6 +1,3 @@
-// Prisma schema — datasource and generator are pre-wired.
-// Your DATABASE_URL lives in server/.env (copy it from .env.example).
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,90 +7,118 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ---------------------------------------------------------------------------
-// Issue 3 — Create and seed IT request categories
-model Category {
-  id        Int      @id @default(autoincrement())
-  name      String   @unique
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  tickets   Ticket[]
+enum Role {
+  REQUESTER
+  IT_STAFF
+  ADMIN
 }
 
-// ---------------------------------------------------------------------------
-// Issue 5 — Development Requester context (Lab 2)
-model DevRequester {
-  id                 Int          @id @default(autoincrement())
-  name               String
-  email              String       @unique
-  isActive           Boolean      @default(true)
-  createdAt          DateTime     @default(now())
-  tickets            Ticket[]
-  removedAttachments Attachment[]
-}
-
-// ---------------------------------------------------------------------------
-// Issue 7 — Related Systems reference data (Lab 2)
-model RelatedSystem {
-  id        Int      @id @default(autoincrement())
-  name      String   @unique
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  tickets   Ticket[]
-}
-
-// ---------------------------------------------------------------------------
-// Issue 8 — Ticket creation (Lab 2)
-enum RequestedPriority {
+enum Priority {
   LOW
   MEDIUM
   HIGH
 }
 
-enum TicketStatus {
+enum Status {
   NEW
+  OPEN
+  IN_PROGRESS
+  WAITING_FOR_REQUESTER
+  RESOLVED
+  CLOSED
+  REOPENED
+  CANCELLED
+}
+
+model Category {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+  tickets   Ticket[]
+}
+
+model RelatedSystem {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+  tickets   Ticket[]
+}
+
+model User {
+  id                 String          @id @default(uuid())
+  email              String          @unique
+  fullName           String
+  passwordHash       String
+  role               Role            @default(REQUESTER)
+  isActive           Boolean         @default(true)
+  mustChangePassword Boolean         @default(true)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @default(now()) @updatedAt
+
+  submittedTickets   Ticket[]        @relation("SubmittedTickets")
+  assignedTickets    Ticket[]        @relation("AssignedTickets")
+  publicComments     PublicComment[]
+  internalNotes      InternalNote[]
 }
 
 model Ticket {
-  id                Int               @id @default(autoincrement())
-  ticketNumber      String            @unique
-  requesterId       Int
-  requester         DevRequester      @relation(fields: [requesterId], references: [id])
-  categoryId        Int
-  category          Category          @relation(fields: [categoryId], references: [id])
-  relatedSystemId   Int
-  relatedSystem     RelatedSystem     @relation(fields: [relatedSystemId], references: [id])
+  id                String          @id @default(uuid())
+  ticketNumber      String          @unique
   summary           String
   description       String
-  requestedPriority RequestedPriority
-  itPriority        RequestedPriority?
-  currentStatus     TicketStatus      @default(NEW)
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
-  attachments       Attachment[]
+  requestedPriority Priority        @default(MEDIUM)
+  itPriority        Priority        @default(MEDIUM)
+  status            Status          @default(NEW)
+  resolutionSummary String?
+  categoryId        String
+  category          Category        @relation(fields: [categoryId], references: [id])
+  relatedSystemId   String?
+  relatedSystem     RelatedSystem?  @relation(fields: [relatedSystemId], references: [id])
+  requesterId       String
+  requester         User            @relation("SubmittedTickets", fields: [requesterId], references: [id])
+  ownerId           String?
+  owner             User?           @relation("AssignedTickets", fields: [ownerId], references: [id])
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @default(now()) @updatedAt
 
-  @@index([requesterId])
-  @@index([currentStatus])
-  @@index([categoryId])
-  @@index([createdAt])
+  attachments       Attachment[]
+  publicComments    PublicComment[]
+  internalNotes     InternalNote[]
 }
 
-// ---------------------------------------------------------------------------
-// Issue 6 — Attachment lifecycle (upload, download, soft-remove)
 model Attachment {
-  id            Int           @id @default(autoincrement())
-  ticketId      Int
-  ticket        Ticket        @relation(fields: [ticketId], references: [id])
+  id            String    @id @default(uuid())
+  ticketId      String
+  ticket        Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   filename      String
   originalName  String
   mimeType      String
   size          Int
-  isRemoved     Boolean       @default(false)
+  path          String
+  isRemoved     Boolean   @default(false)
   removedAt     DateTime?
-  removalReason String?
-  removedById   Int?
-  removedBy     DevRequester? @relation(fields: [removedById], references: [id])
-  createdAt     DateTime      @default(now())
+  removedReason String?
+  createdAt     DateTime  @default(now())
+}
 
-  @@index([ticketId])
+model PublicComment {
+  id        String   @id @default(uuid())
+  ticketId  String
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  content   String
+  createdAt DateTime @default(now())
+}
+
+model InternalNote {
+  id        String   @id @default(uuid())
+  ticketId  String
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  content   String
+  createdAt DateTime @default(now())
 }
