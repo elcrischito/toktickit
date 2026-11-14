@@ -8,10 +8,14 @@ import { UserManagement } from "./pages/UserManagement";
 import { TicketDetail } from "./pages/TicketDetail";
 import { RequesterTickets } from "./pages/RequesterTickets";
 import { RequesterCreateTicket } from "./pages/RequesterCreateTicket";
+import { StaffDashboard, QueueDrillDownFilter } from "./pages/StaffDashboard";
+import { RequesterDashboard } from "./pages/RequesterDashboard";
 
 const MainContent: React.FC = () => {
   const { user } = useAuth();
   const [path, setPath] = useState<string>(() => window.location.pathname);
+  const [queueFilter, setQueueFilter] = useState<QueueDrillDownFilter | undefined>(undefined);
+  const [requesterStatusFilter, setRequesterStatusFilter] = useState<string>("");
 
   useEffect(() => {
     const onPopState = () => setPath(window.location.pathname);
@@ -54,10 +58,23 @@ const MainContent: React.FC = () => {
           />
         );
       }
+      if (path === "/my-tickets") {
+        return (
+          <RequesterTickets
+            initialStatus={requesterStatusFilter}
+            onSelectTicket={(id) => navigate(`/tickets/${id}`)}
+            onCreateNew={() => navigate("/create-ticket")}
+          />
+        );
+      }
       return (
-        <RequesterTickets
+        <RequesterDashboard
+          onNavigateMyTickets={(statusFilter) => {
+            setRequesterStatusFilter(statusFilter || "");
+            navigate("/my-tickets");
+          }}
+          onCreateTicket={() => navigate("/create-ticket")}
           onSelectTicket={(id) => navigate(`/tickets/${id}`)}
-          onCreateNew={() => navigate("/create-ticket")}
         />
       );
     }
@@ -66,11 +83,29 @@ const MainContent: React.FC = () => {
       return <UserManagement />;
     }
 
-    return <StaffQueue onSelectTicket={(id) => navigate(`/tickets/${id}`)} />;
+    if (path === "/queue") {
+      return (
+        <StaffQueue
+          initialFilter={queueFilter}
+          onSelectTicket={(id) => navigate(`/tickets/${id}`)}
+        />
+      );
+    }
+
+    return (
+      <StaffDashboard
+        onNavigateQueue={(filter) => {
+          setQueueFilter(filter);
+          navigate("/queue");
+        }}
+        onSelectTicket={(id) => navigate(`/tickets/${id}`)}
+        onNavigateAdminUsers={() => navigate("/admin/users")}
+      />
+    );
   };
 
   return (
-    <div style={{ backgroundColor: "#f8f9fa", minHeight: "100vh" }}>
+    <div style={{ backgroundColor: "#f8f9fa", minHeight: "100vh", overflowX: "hidden" }}>
       <Navbar onNavigate={navigate} />
       <main>{renderPage()}</main>
     </div>
