@@ -19,7 +19,7 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email: "admin@toktickit.com" },
-    update: {},
+    update: { passwordHash: defaultPasswordHash, isActive: true, mustChangePassword: true },
     create: { email: "admin@toktickit.com", fullName: "John Smith (Admin)", passwordHash: defaultPasswordHash, role: Role.ADMIN, isActive: true, mustChangePassword: true },
   });
 
