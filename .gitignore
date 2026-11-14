@@ -15,3 +15,6 @@ server/prisma/*.db
 
 # uploaded attachments (Lab 2)
 server/uploads/
+
+# Python bytecode from deploy/tests
+__pycache__/
