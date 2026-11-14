@@ -5,7 +5,7 @@ import { authenticate, AuthRequest } from "../middleware/auth";
 const router = Router();
 const prisma = new PrismaClient();
 
-// GET /api/tickets - Liste des tickets du Requester authentifié (ou tous si Staff/Admin)
+// GET /api/tickets
 router.get("/", authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { search, status, priority } = req.query;
@@ -21,7 +21,13 @@ router.get("/", authenticate, async (req: AuthRequest, res: Response) => {
         { summary: { contains: String(search), mode: "insensitive" } },
       ];
     }
-    if (status) where.status = String(status);
+    if (status) {
+      if (status === "OPEN_ALL") {
+        where.status = { in: ["NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "REOPENED"] };
+      } else {
+        where.status = String(status);
+      }
+    }
     if (priority) where.requestedPriority = String(priority);
 
     const tickets = await prisma.ticket.findMany({
@@ -32,6 +38,7 @@ router.get("/", authenticate, async (req: AuthRequest, res: Response) => {
         relatedSystem: true,
         requester: { select: { id: true, fullName: true, email: true } },
         owner: { select: { id: true, fullName: true, email: true } },
+        _count: { select: { actionsTaken: true } },
       },
     });
 
@@ -41,7 +48,7 @@ router.get("/", authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// POST /api/tickets - Créer un ticket avec l'identité authentifiée (FR-03, BR-03)
+// POST /api/tickets
 router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { categoryId, relatedSystemId, summary, description, requestedPriority } = req.body;
@@ -92,7 +99,7 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// GET /api/tickets/:id - Détail d'un ticket (vérifie ownership pour REQUESTER -> AC-03)
+// GET /api/tickets/:id
 router.get("/:id", authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const ticket = await prisma.ticket.findUnique({
@@ -106,9 +113,7 @@ router.get("/:id", authenticate, async (req: AuthRequest, res: Response) => {
       },
     });
 
-    if (!ticket) {
-      return res.status(404).json({ error: "Ticket not found" });
-    }
+    if (!ticket) return res.status(404).json({ error: "Ticket not found" });
 
     if (req.user!.role === "REQUESTER" && ticket.requesterId !== req.user!.id) {
       return res.status(404).json({ error: "Ticket not found" });
@@ -120,7 +125,7 @@ router.get("/:id", authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// POST /api/tickets/:id/problem-resolved - Action Requester (BR-05 : ne passe PAS directement à RESOLVED/CLOSED)
+// POST /api/tickets/:id/problem-resolved (Action consultative Requester - BR-07)
 router.post("/:id/problem-resolved", authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const ticket = await prisma.ticket.findUnique({ where: { id: req.params.id } });
@@ -148,6 +153,32 @@ router.post("/:id/problem-resolved", authenticate, async (req: AuthRequest, res:
     });
   } catch {
     return res.status(500).json({ error: "Failed to record resolution confirmation" });
+  }
+});
+
+// POST /api/tickets/:id/reopen (BR-06 : Requester owner depuis RESOLVED, ou Staff/Admin depuis RESOLVED/CLOSED)
+router.post("/:id/reopen", authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const ticket = await prisma.ticket.findUnique({ where: { id: req.params.id } });
+    if (!ticket) return res.status(404).json({ error: "Ticket not found" });
+
+    if (req.user!.role === "REQUESTER") {
+      if (ticket.requesterId !== req.user!.id) return res.status(403).json({ error: "Access denied" });
+      if (ticket.status !== "RESOLVED") {
+        return res.status(400).json({ error: "Requesters may only reopen Tickets currently in RESOLVED status." });
+      }
+    } else if (!["RESOLVED", "CLOSED"].includes(ticket.status)) {
+      return res.status(400).json({ error: `Cannot reopen Ticket from ${ticket.status} status.` });
+    }
+
+    const updated = await prisma.ticket.update({
+      where: { id: ticket.id },
+      data: { status: "REOPENED", version: { increment: 1 } },
+    });
+
+    return res.json(updated);
+  } catch {
+    return res.status(500).json({ error: "Failed to reopen ticket" });
   }
 });
 

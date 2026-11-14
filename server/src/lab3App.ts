@@ -6,6 +6,8 @@ import staffTicketsRoutes from "./routes/staffTickets";
 import ticketsRoutes from "./routes/tickets";
 import commentsNotesRoutes from "./routes/commentsNotes";
 import adminUsersRoutes from "./routes/adminUsers";
+import actionsTakenRoutes from "./routes/actionsTaken";
+import dashboardRoutes from "./routes/dashboard";
 
 const prisma = new PrismaClient();
 export const lab3App = express();
@@ -39,6 +41,8 @@ lab3App.use("/api/auth", authRoutes);
 lab3App.use("/api/staff/tickets", staffTicketsRoutes);
 lab3App.use("/api/tickets", ticketsRoutes);
 lab3App.use("/api/tickets", commentsNotesRoutes);
+lab3App.use("/api/tickets", actionsTakenRoutes);
 lab3App.use("/api/admin/users", adminUsersRoutes);
+lab3App.use("/api/dashboard", dashboardRoutes);
 
 export default lab3App;

@@ -95,7 +95,7 @@ export default function TicketDetail({ ticketId, onBack }: Props) {
 
     setUploadError(null);
     setRemovingId(attachmentId);
-    removeAttachment(requester.id, ticketId, attachmentId, trimmedReason)
+    removeAttachment(requester.id, ticketId, attachmentId)
       .then(() => {
         setTicket((prev) =>
           prev

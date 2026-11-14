@@ -30,6 +30,13 @@ enum Status {
   CANCELLED
 }
 
+enum ActionStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
 model Category {
   id        String   @id @default(uuid())
   name      String   @unique
@@ -61,6 +68,8 @@ model User {
   assignedTickets    Ticket[]        @relation("AssignedTickets")
   publicComments     PublicComment[]
   internalNotes      InternalNote[]
+  performedActions   ActionTaken[]   @relation("PerformedActions")
+  assignedActions    ActionTaken[]   @relation("AssignedActions")
 }
 
 model Ticket {
@@ -72,6 +81,7 @@ model Ticket {
   itPriority        Priority        @default(MEDIUM)
   status            Status          @default(NEW)
   resolutionSummary String?
+  version           Int             @default(1)
   categoryId        String
   category          Category        @relation(fields: [categoryId], references: [id])
   relatedSystemId   String?
@@ -86,6 +96,30 @@ model Ticket {
   attachments       Attachment[]
   publicComments    PublicComment[]
   internalNotes     InternalNote[]
+  actionsTaken      ActionTaken[]
+}
+
+model ActionTaken {
+  id               String       @id @default(uuid())
+  ticketId         String
+  ticket           Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  actionDateTime   DateTime     @default(now())
+  description      String
+  result           String
+  status           ActionStatus @default(COMPLETED)
+  performedById    String
+  performedBy      User         @relation("PerformedActions", fields: [performedById], references: [id])
+  assignedToId     String?
+  assignedTo       User?        @relation("AssignedActions", fields: [assignedToId], references: [id])
+  followUpRequired Boolean      @default(false)
+  followUpNote     String?
+  attachmentNotes  String?
+  version          Int          @default(1)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @default(now()) @updatedAt
+
+  @@index([ticketId, actionDateTime])
+  @@index([assignedToId, status])
 }
 
 model Attachment {

@@ -1,10 +1,22 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { ActionsTakenSection, ActionTakenItem } from "../components/ActionsTakenSection";
 
 interface TicketDetailProps {
   ticketId: string;
   onBack: () => void;
 }
+
+const ALLOWED_STAFF_TRANSITIONS: Record<string, string[]> = {
+  NEW: ["OPEN", "IN_PROGRESS", "CANCELLED"],
+  OPEN: ["IN_PROGRESS", "WAITING_FOR_REQUESTER", "RESOLVED", "CANCELLED"],
+  IN_PROGRESS: ["OPEN", "WAITING_FOR_REQUESTER", "RESOLVED", "CANCELLED"],
+  WAITING_FOR_REQUESTER: ["IN_PROGRESS", "RESOLVED", "CANCELLED"],
+  RESOLVED: ["CLOSED", "REOPENED"],
+  REOPENED: ["IN_PROGRESS", "WAITING_FOR_REQUESTER", "RESOLVED", "CANCELLED"],
+  CLOSED: ["REOPENED"],
+  CANCELLED: [],
+};
 
 export const TicketDetail: React.FC<TicketDetailProps> = ({ ticketId, onBack }) => {
   const { user, token } = useAuth();
@@ -14,15 +26,19 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ ticketId, onBack }) 
   const [comments, setComments] = useState<any[]>([]);
   const [notes, setNotes] = useState<any[]>([]);
   const [agents, setAgents] = useState<any[]>([]);
+  const [actions, setActions] = useState<ActionTakenItem[]>([]);
 
   const [ownerId, setOwnerId] = useState("");
   const [itPriority, setItPriority] = useState("MEDIUM");
   const [status, setStatus] = useState("NEW");
+  const [resolutionSummary, setResolutionSummary] = useState("");
 
   const [newComment, setNewComment] = useState("");
   const [newNote, setNewNote] = useState("");
   const [loading, setLoading] = useState(true);
+  const [savingStaff, setSavingStaff] = useState(false);
   const [error, setError] = useState("");
+  const [workflowError, setWorkflowError] = useState("");
   const [feedback, setFeedback] = useState("");
 
   const headers = {
@@ -45,17 +61,34 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ ticketId, onBack }) 
       setOwnerId(ticketData.ownerId || "");
       setItPriority(ticketData.itPriority || "MEDIUM");
       setStatus(ticketData.status || "NEW");
+      setResolutionSummary(ticketData.resolutionSummary || "");
 
-      const commentsRes = await fetch(`/api/tickets/${ticketId}/comments`, { headers });
-      if (commentsRes.ok) setComments(await commentsRes.json());
+      const [commentsRes, actionsRes] = await Promise.all([
+        fetch(`/api/tickets/${ticketId}/comments`, { headers }),
+        fetch(`/api/tickets/${ticketId}/actions`, { headers }),
+      ]);
+      if (commentsRes.ok) {
+        const cData = await commentsRes.json();
+        if (Array.isArray(cData)) setComments(cData);
+      }
+      if (actionsRes.ok) {
+        const aData = await actionsRes.json();
+        if (Array.isArray(aData?.actions)) setActions(aData.actions);
+      }
 
       if (isStaff) {
         const [notesRes, agentsRes] = await Promise.all([
           fetch(`/api/tickets/${ticketId}/notes`, { headers }),
           fetch(`/api/staff/tickets/agents`, { headers }),
         ]);
-        if (notesRes.ok) setNotes(await notesRes.json());
-        if (agentsRes.ok) setAgents(await agentsRes.json());
+        if (notesRes.ok) {
+          const nData = await notesRes.json();
+          if (Array.isArray(nData)) setNotes(nData);
+        }
+        if (agentsRes.ok) {
+          const agData = await agentsRes.json();
+          if (Array.isArray(agData)) setAgents(agData);
+        }
       }
     } catch {
       setError("Network error while loading ticket.");
@@ -70,7 +103,15 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ ticketId, onBack }) 
 
   const handleSaveStaffUpdates = async (overrideOwnerId?: string) => {
     setFeedback("");
+    setWorkflowError("");
     const targetOwner = overrideOwnerId !== undefined ? overrideOwnerId : ownerId;
+
+    if (status === "RESOLVED" && !resolutionSummary.trim()) {
+      setWorkflowError("Resolution Summary is required before marking a Ticket as Resolved.");
+      return;
+    }
+
+    setSavingStaff(true);
     try {
       const res = await fetch(`/api/staff/tickets/${ticketId}`, {
         method: "PATCH",
@@ -79,18 +120,27 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ ticketId, onBack }) 
           ownerId: targetOwner || null,
           itPriority,
           status,
+          resolutionSummary: resolutionSummary.trim(),
+          version: ticket.version,
         }),
       });
-      if (res.ok) {
-        const updated = await res.json();
-        setTicket(updated);
-        setOwnerId(updated.ownerId || "");
-        setFeedback("Ticket updated successfully.");
+      const data = await res.json();
+      if (res.status === 409) {
+        setWorkflowError(data.error || "Conflict: Ticket was modified concurrently. Reloading latest state...");
+        loadAll();
+      } else if (!res.ok) {
+        setWorkflowError(data.error || "Failed to update ticket.");
       } else {
-        setError("Failed to update ticket.");
+        setTicket(data);
+        setOwnerId(data.ownerId || "");
+        setStatus(data.status);
+        setResolutionSummary(data.resolutionSummary || "");
+        setFeedback("Ticket updated successfully.");
       }
     } catch {
-      setError("Network error while saving changes.");
+      setWorkflowError("Network error while saving changes.");
+    } finally {
+      setSavingStaff(false);
     }
   };
 
@@ -144,6 +194,22 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ ticketId, onBack }) 
     }
   };
 
+  const handleReopen = async () => {
+    setFeedback("");
+    setWorkflowError("");
+    const res = await fetch(`/api/tickets/${ticketId}/reopen`, {
+      method: "POST",
+      headers,
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setWorkflowError(data.error || "Unable to reopen ticket.");
+    } else {
+      setFeedback("Ticket has been reopened.");
+      loadAll();
+    }
+  };
+
   if (loading) return <div style={{ padding: 24 }}>Loading ticket details...</div>;
   if (error || !ticket) {
     return (
@@ -158,8 +224,11 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ ticketId, onBack }) 
     );
   }
 
+  const permittedNextStatuses = ALLOWED_STAFF_TRANSITIONS[ticket.status] || [];
+  const availableStatusOptions = Array.from(new Set([ticket.status, ...permittedNextStatuses]));
+
   return (
-    <div style={{ padding: 24, maxWidth: 1100, margin: "0 auto" }}>
+    <div style={{ padding: "24px 16px", maxWidth: 1100, margin: "0 auto" }}>
       <button onClick={onBack} style={{ marginBottom: 16, padding: "8px 14px", borderRadius: 4, border: "1px solid #1b4332", backgroundColor: "#fff", color: "#1b4332", cursor: "pointer", fontWeight: "bold" }}>
         ← {isStaff ? "Back to Queue" : "Back to My Tickets"}
       </button>
@@ -201,26 +270,58 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ ticketId, onBack }) 
           <p style={{ margin: 0, whiteSpace: "pre-wrap", color: "#1F2A24" }}>{ticket.description}</p>
         </div>
 
-        {/* Requester Action (BR-05) */}
-        {!isStaff && ticket.status !== "RESOLVED" && ticket.status !== "CLOSED" && (
-          <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #eee" }}>
-            <button
-              onClick={handleAppearsResolved}
-              style={{ backgroundColor: "#1b4332", color: "#fff", border: "none", padding: "10px 16px", borderRadius: 4, cursor: "pointer", fontWeight: "bold" }}
-            >
-              Problem Appears Resolved
-            </button>
+        {ticket.resolutionSummary && (
+          <div style={{ marginTop: 16, padding: 14, backgroundColor: "#d8f3dc", borderRadius: 6, borderLeft: "4px solid #1b4332" }}>
+            <strong style={{ color: "#1b4332", display: "block", marginBottom: 4 }}>Resolution Summary</strong>
+            <span style={{ color: "#1F2A24", fontSize: 14 }}>{ticket.resolutionSummary}</span>
+          </div>
+        )}
+
+        {/* Requester Advisory Resolution & Reopen Controls (BR-06, BR-07) */}
+        {!isStaff && (
+          <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #eee", display: "flex", gap: 12, flexWrap: "wrap" }}>
+            {!["RESOLVED", "CLOSED", "CANCELLED"].includes(ticket.status) && (
+              <button
+                type="button"
+                onClick={handleAppearsResolved}
+                style={{ backgroundColor: "#1b4332", color: "#fff", border: "none", padding: "10px 16px", borderRadius: 4, cursor: "pointer", fontWeight: "bold" }}
+              >
+                Problem Appears Resolved
+              </button>
+            )}
+            {ticket.status === "RESOLVED" && (
+              <button
+                type="button"
+                onClick={handleReopen}
+                style={{ backgroundColor: "#b45309", color: "#fff", border: "none", padding: "10px 16px", borderRadius: 4, cursor: "pointer", fontWeight: "bold" }}
+              >
+                Reopen Ticket
+              </button>
+            )}
           </div>
         )}
       </div>
 
+      {/* Actions Taken Section (Visible to Requester owner read-only & IT Staff/Admin read/write) */}
+      <ActionsTakenSection
+        ticketId={ticketId}
+        token={token}
+        isStaff={isStaff}
+        actions={actions}
+        agents={agents}
+        onActionCreated={(created) => setActions((prev) => [...prev, created])}
+        onActionUpdated={(updated) => setActions((prev) => prev.map((item) => (item.id === updated.id ? updated : item)))}
+        onRefreshAll={loadAll}
+      />
+
       {/* IT Staff Workflow Controls */}
       {isStaff && (
         <div style={{ backgroundColor: "#ffffff", border: "1px solid #dee2e6", borderRadius: 8, padding: 24, marginBottom: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
             <h3 style={{ margin: 0, fontSize: 18, color: "#1b4332" }}>IT Staff Triage & Workflow</h3>
             {ticket.ownerId !== user?.id && (
               <button
+                type="button"
                 onClick={handleClaim}
                 style={{ backgroundColor: "#0B7A46", color: "#fff", border: "none", padding: "8px 14px", borderRadius: 4, cursor: "pointer", fontWeight: "bold" }}
               >
@@ -229,10 +330,16 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ ticketId, onBack }) 
             )}
           </div>
 
+          {workflowError && (
+            <div role="alert" style={{ padding: 10, marginBottom: 14, backgroundColor: "#f8d7da", color: "#721c24", borderRadius: 4, fontSize: 13 }}>
+              {workflowError}
+            </div>
+          )}
+
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, marginBottom: 16 }}>
             <div>
-              <label style={{ display: "block", fontSize: 13, fontWeight: "bold", marginBottom: 6 }}>Assigned Owner</label>
-              <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)} style={{ width: "100%", padding: 10, borderRadius: 4, border: "1px solid #ccc" }}>
+              <label htmlFor="ticket-owner-select" style={{ display: "block", fontSize: 13, fontWeight: "bold", marginBottom: 6 }}>Assigned Owner</label>
+              <select id="ticket-owner-select" value={ownerId} onChange={(e) => setOwnerId(e.target.value)} style={{ width: "100%", padding: 10, borderRadius: 4, border: "1px solid #ccc" }}>
                 <option value="">Unassigned</option>
                 {agents.map((a) => (
                   <option key={a.id} value={a.id}>{a.fullName} ({a.role})</option>
@@ -241,8 +348,8 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ ticketId, onBack }) 
             </div>
 
             <div>
-              <label style={{ display: "block", fontSize: 13, fontWeight: "bold", marginBottom: 6 }}>IT Priority</label>
-              <select value={itPriority} onChange={(e) => setItPriority(e.target.value)} style={{ width: "100%", padding: 10, borderRadius: 4, border: "1px solid #ccc" }}>
+              <label htmlFor="ticket-priority-select" style={{ display: "block", fontSize: 13, fontWeight: "bold", marginBottom: 6 }}>IT Priority</label>
+              <select id="ticket-priority-select" value={itPriority} onChange={(e) => setItPriority(e.target.value)} style={{ width: "100%", padding: 10, borderRadius: 4, border: "1px solid #ccc" }}>
                 <option value="LOW">LOW</option>
                 <option value="MEDIUM">MEDIUM</option>
                 <option value="HIGH">HIGH</option>
@@ -250,31 +357,44 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ ticketId, onBack }) 
             </div>
 
             <div>
-              <label style={{ display: "block", fontSize: 13, fontWeight: "bold", marginBottom: 6 }}>Status</label>
-              <select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: "100%", padding: 10, borderRadius: 4, border: "1px solid #ccc" }}>
-                <option value="NEW">NEW</option>
-                <option value="OPEN">OPEN</option>
-                <option value="IN_PROGRESS">IN_PROGRESS</option>
-                <option value="WAITING_FOR_REQUESTER">WAITING_FOR_REQUESTER</option>
-                <option value="RESOLVED">RESOLVED</option>
-                <option value="CLOSED">CLOSED</option>
-                <option value="REOPENED">REOPENED</option>
-                <option value="CANCELLED">CANCELLED</option>
+              <label htmlFor="ticket-status-select" style={{ display: "block", fontSize: 13, fontWeight: "bold", marginBottom: 6 }}>Status (Permitted Transitions)</label>
+              <select id="ticket-status-select" value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: "100%", padding: 10, borderRadius: 4, border: "1px solid #ccc" }}>
+                {availableStatusOptions.map((st) => (
+                  <option key={st} value={st}>{st}</option>
+                ))}
               </select>
             </div>
           </div>
 
+          {(status === "RESOLVED" || resolutionSummary) && (
+            <div style={{ marginBottom: 16 }}>
+              <label htmlFor="ticket-resolution-summary" style={{ display: "block", fontSize: 13, fontWeight: "bold", marginBottom: 6 }}>
+                Resolution Summary {status === "RESOLVED" ? "*" : ""}
+              </label>
+              <textarea
+                id="ticket-resolution-summary"
+                rows={2}
+                placeholder="Summarize the final fix applied for the Requester..."
+                value={resolutionSummary}
+                onChange={(e) => setResolutionSummary(e.target.value)}
+                style={{ width: "100%", padding: 10, borderRadius: 4, border: "1px solid #ccc" }}
+              />
+            </div>
+          )}
+
           <button
+            type="button"
+            disabled={savingStaff}
             onClick={() => handleSaveStaffUpdates()}
             style={{ backgroundColor: "#1b4332", color: "#fff", border: "none", padding: "10px 20px", borderRadius: 4, cursor: "pointer", fontWeight: "bold" }}
           >
-            Save Ticket Updates
+            {savingStaff ? "Saving..." : "Save Ticket Updates"}
           </button>
         </div>
       )}
 
       {/* Communication Grid: Public Comments + Staff-Only Internal Notes */}
-      <div style={{ display: "grid", gridTemplateColumns: isStaff ? "1fr 1fr" : "1fr", gap: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isStaff ? "repeat(auto-fit, minmax(320px, 1fr))" : "1fr", gap: 20 }}>
         {/* Public Comments */}
         <div style={{ backgroundColor: "#ffffff", border: "1px solid #dee2e6", borderRadius: 8, padding: 20 }}>
           <h3 style={{ margin: "0 0 12px 0", fontSize: 17, color: "#1b4332" }}>Public Comments ({comments.length})</h3>
