@@ -21,3 +21,15 @@
 | E2E-02 | E2E | AC-05..06 | Full Ticket lifecycle through Requester check, Resolve & Close | Status rules enforced end-to-end | `e2e/lab-04/ticket-resolution.spec.ts` | Planned |
 | E2E-03 | E2E / Resp | AC-07..09 | Dashboards & Ticket Detail across Desktop/Tablet/Mobile | Zero horizontal overflow, working drill-downs | `e2e/lab-04/dashboards.spec.ts` | Planned |
 | REG-01 | Regression | AC-09 | Full Labs 1–3 backend & frontend test suites | All 17 existing tests pass | `server/tests/lab-03/*.test.ts` | Planned |
+
+## Execution Results & Visual Evidence
+- **Backend API Tests (`cd server && npm test`)**: All Lab 3 and Lab 4 Vitest/Supertest suites passing.
+- **Frontend UI Tests (`cd client && npx vitest run tests/lab-03 tests/lab-04`)**: 5 test files / 10 tests passing.
+- **Playwright E2E (`cd client && npx playwright test tests-e2e/lab4-workflows.spec.ts --workers=1`)**: 12/12 tests passing across Desktop (`1440x900`), Tablet (`iPad Mini`), and Mobile (`iPhone 13`).
+- **Visual Proofs (`docs/evidence/lab-04/`)**:
+  - `01-staff-dashboard-desktop.png` — IT Staff Operations Dashboard metrics and recent lists
+  - `02-ticket-detail-actions-taken.png` — Ticket Detail with Actions Taken creation/edit and follow-up badge
+  - `03-ticket-resolved-workflow.png` — Ticket transitioned to `RESOLVED` with Resolution Summary
+  - `04-requester-dashboard.png` — Requester Dashboard metrics and Needs Your Attention section
+  - `05-admin-dashboard-users.png` — Administrator Dashboard user overview and RBAC navigation
+  - `06-staff-dashboard-mobile.png` — Mobile responsive layout verification
