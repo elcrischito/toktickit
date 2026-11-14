@@ -1,14 +1,13 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
-import { app } from "../../src/app.js";
+import { lab3App } from "../../src/lab3App";
 
-// WORKED EXAMPLE — this test is written for you. Study it, then implement the
-// /api/health route in src/app.ts until this test turns green. Use the same
-// pattern to write the categories test yourself (see categories.test.ts).
+// Lab 1 worked example, now pointed at the live app (lab3App) instead of the
+// retired Lab 1/2 src/app.ts.
 describe("GET /api/health", () => {
   it("returns 200 with status ok and the service name", async () => {
-    const res = await request(app).get("/api/health");
+    const res = await request(lab3App).get("/api/health");
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ status: "ok", service: "TokTickIT API" });
+    expect(res.body).toMatchObject({ status: "ok", service: "TokTickIT API" });
   });
 });

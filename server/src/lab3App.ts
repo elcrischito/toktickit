@@ -8,6 +8,7 @@ import commentsNotesRoutes from "./routes/commentsNotes";
 import adminUsersRoutes from "./routes/adminUsers";
 import actionsTakenRoutes from "./routes/actionsTaken";
 import dashboardRoutes from "./routes/dashboard";
+import { ticketAttachmentsRouter, attachmentsRouter } from "./routes/attachments";
 
 const prisma = new PrismaClient();
 export const lab3App = express();
@@ -16,7 +17,7 @@ lab3App.use(cors());
 lab3App.use(express.json());
 
 lab3App.get("/api/health", (_req, res) => {
-  res.json({ status: "ok", timestamp: new Date() });
+  res.json({ status: "ok", service: "TokTickIT API", timestamp: new Date() });
 });
 
 lab3App.get("/api/categories", async (_req, res) => {
@@ -44,5 +45,7 @@ lab3App.use("/api/tickets", commentsNotesRoutes);
 lab3App.use("/api/tickets", actionsTakenRoutes);
 lab3App.use("/api/admin/users", adminUsersRoutes);
 lab3App.use("/api/dashboard", dashboardRoutes);
+lab3App.use("/api/tickets", ticketAttachmentsRouter);
+lab3App.use("/api/attachments", attachmentsRouter);
 
 export default lab3App;

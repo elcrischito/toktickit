@@ -55,6 +55,7 @@ const MainContent: React.FC = () => {
           <RequesterCreateTicket
             onSuccess={() => navigate("/my-tickets")}
             onCancel={() => navigate("/my-tickets")}
+            onViewTicket={(id) => navigate(`/tickets/${id}`)}
           />
         );
       }

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { ActionsTakenSection, ActionTakenItem } from "../components/ActionsTakenSection";
+import { AttachmentsSection } from "../components/AttachmentsSection";
 
 interface TicketDetailProps {
   ticketId: string;
@@ -301,6 +302,13 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ ticketId, onBack }) 
           </div>
         )}
       </div>
+
+      {/* Attachments (Lab 2 BR-13..BR-18): owner Requester can add/remove, IT Staff/Admin can view & download */}
+      <AttachmentsSection
+        ticketId={ticketId}
+        token={token}
+        canModify={user?.role === "REQUESTER" && ticket.requester?.id === user?.id}
+      />
 
       {/* Actions Taken Section (Visible to Requester owner read-only & IT Staff/Admin read/write) */}
       <ActionsTakenSection

@@ -175,8 +175,10 @@ router.patch("/:id/actions/:actionId", authenticate, authorize(["IT_STAFF", "ADM
       return res.status(400).json({ error: "Invalid Action Date/Time." });
     }
 
+    // Atomic optimistic-concurrency write (BR-08): the extra `version` filter makes Prisma
+    // throw P2025 if another user saved this Action Taken in the meantime.
     const updated = await prisma.actionTaken.update({
-      where: { id: existing.id },
+      where: { id: existing.id, version: existing.version },
       data: {
         actionDateTime: nextDate,
         description: nextDesc,
@@ -197,7 +199,12 @@ router.patch("/:id/actions/:actionId", authenticate, authorize(["IT_STAFF", "ADM
     });
 
     return res.json(updated);
-  } catch {
+  } catch (err: any) {
+    if (err?.code === "P2025") {
+      return res.status(409).json({
+        error: "Conflict: This Action Taken was modified by another user. Please refresh and try again.",
+      });
+    }
     return res.status(500).json({ error: "Failed to update Action Taken" });
   }
 });

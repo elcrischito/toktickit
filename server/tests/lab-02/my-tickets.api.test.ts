@@ -1,137 +1,135 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
-import { app } from "../../src/app.js";
-import { getPrisma } from "../../src/prisma.js";
+import bcrypt from "bcryptjs";
+import { PrismaClient, Role } from "@prisma/client";
+import { lab3App } from "../../src/lab3App";
 
-let requesterAId: number;
-let requesterBId: number;
-let categoryId: number;
-let relatedSystemId: number;
+// Lab 2 "My Tickets" API rules, migrated from the retired x-requester-id header
+// to the Lab 3 JWT session. Two throw-away requesters keep the counts predictable.
+const prisma = new PrismaClient();
+const stamp = Date.now();
+const emailA = `lab2.mytickets.a.${stamp}@toktickit.com`;
+const emailB = `lab2.mytickets.b.${stamp}@toktickit.com`;
 
-async function createTicket(requesterId: number, overrides: Partial<Record<string, unknown>> = {}) {
-  return request(app)
+let tokenA = "";
+let tokenB = "";
+let hardwareId = "";
+let softwareId = "";
+
+async function createTicket(token: string, overrides: Record<string, unknown> = {}) {
+  const res = await request(lab3App)
     .post("/api/tickets")
-    .set("x-requester-id", String(requesterId))
+    .set("Authorization", `Bearer ${token}`)
     .send({
-      categoryId,
-      relatedSystemId,
+      categoryId: hardwareId,
       summary: "Default summary for test ticket",
       description: "Default description long enough to pass validation rules.",
       requestedPriority: "MEDIUM",
       ...overrides,
     });
+  expect(res.status).toBe(201);
+  return res.body;
 }
 
 beforeAll(async () => {
-  const prisma = getPrisma();
-  const requesters = await prisma.devRequester.findMany({ where: { isActive: true }, take: 2 });
-  requesterAId = requesters[0].id;
-  requesterBId = requesters[1].id;
+  const hash = await bcrypt.hash("Password123!", 10);
+  for (const email of [emailA, emailB]) {
+    await prisma.user.create({
+      data: { email, fullName: `Lab2 ${email}`, passwordHash: hash, role: Role.REQUESTER, isActive: true, mustChangePassword: false },
+    });
+  }
+  const [a, b] = await Promise.all([
+    request(lab3App).post("/api/auth/login").send({ email: emailA, password: "Password123!" }),
+    request(lab3App).post("/api/auth/login").send({ email: emailB, password: "Password123!" }),
+  ]);
+  tokenA = a.body.token;
+  tokenB = b.body.token;
 
-  const category = await prisma.category.findFirst({ where: { isActive: true } });
-  const relatedSystem = await prisma.relatedSystem.findFirst({ where: { isActive: true } });
-  categoryId = category!.id;
-  relatedSystemId = relatedSystem!.id;
+  hardwareId = (await prisma.category.findUniqueOrThrow({ where: { name: "Hardware" } })).id;
+  softwareId = (await prisma.category.findUniqueOrThrow({ where: { name: "Software" } })).id;
+
+  // Requester A: 12 tickets (enough for 2 pages of 10). Requester B: none.
+  await createTicket(tokenA, { summary: "Laptop battery swelling", requestedPriority: "HIGH" });
+  await createTicket(tokenA, { summary: "Excel crashes on start", categoryId: softwareId, requestedPriority: "LOW" });
+  for (let i = 0; i < 10; i++) {
+    await createTicket(tokenA, { summary: `Filler ticket number ${i}` });
+  }
 });
 
+afterAll(async () => {
+  const users = await prisma.user.findMany({ where: { email: { in: [emailA, emailB] } } });
+  const ids = users.map((u) => u.id);
+  await prisma.ticket.deleteMany({ where: { requesterId: { in: ids } } });
+  await prisma.user.deleteMany({ where: { id: { in: ids } } });
+  await prisma.$disconnect();
+});
+
+const listAs = (token: string, query: Record<string, string> = {}) =>
+  request(lab3App).get("/api/tickets").query(query).set("Authorization", `Bearer ${token}`);
+
 describe("GET /api/tickets (My Tickets)", () => {
-  it("rejects a request with no requester context (BR-04)", async () => {
-    const res = await request(app).get("/api/tickets");
-    expect(res.status).toBe(400);
-    expect(res.body.error.code).toBe("INVALID_REQUESTER");
+  it("rejects a request with no session (BR-04, now 401 instead of x-requester-id 400)", async () => {
+    const res = await request(lab3App).get("/api/tickets");
+    expect(res.status).toBe(401);
   });
 
-  it("only returns tickets belonging to the requesting user (ownership scoping)", async () => {
-    await createTicket(requesterAId, { summary: "Ticket owned by requester A only" });
-    await createTicket(requesterBId, { summary: "Ticket owned by requester B only" });
-
-    const res = await request(app)
-      .get("/api/tickets")
-      .set("x-requester-id", String(requesterAId));
-
+  it("only returns tickets belonging to the logged-in requester (ownership scoping)", async () => {
+    const res = await listAs(tokenA, { pageSize: "50" });
     expect(res.status).toBe(200);
-    const summaries = res.body.data.map((t: { summary: string }) => t.summary);
-    expect(summaries).toContain("Ticket owned by requester A only");
-    expect(summaries).not.toContain("Ticket owned by requester B only");
+    expect(res.body.total).toBe(12);
+    const requesterIds = new Set(res.body.tickets.map((t: any) => t.requester.id));
+    expect(requesterIds.size).toBe(1);
+    expect(res.body.tickets[0].requester.email).toBe(emailA);
   });
 
   it("filters results by search term matching summary or ticket number", async () => {
-    await createTicket(requesterAId, { summary: "Very unique searchable phrase xyz123" });
+    const bySummary = await listAs(tokenA, { search: "battery" });
+    expect(bySummary.body.total).toBe(1);
+    const ticketNumber = bySummary.body.tickets[0].ticketNumber;
 
-    const res = await request(app)
-      .get("/api/tickets")
-      .query({ search: "xyz123" })
-      .set("x-requester-id", String(requesterAId));
-
-    expect(res.status).toBe(200);
-    expect(res.body.data.length).toBeGreaterThan(0);
-    expect(
-      res.body.data.every((t: { summary: string }) => t.summary.includes("xyz123"))
-    ).toBe(true);
+    const byNumber = await listAs(tokenA, { search: ticketNumber });
+    expect(byNumber.body.tickets.map((t: any) => t.ticketNumber)).toEqual([ticketNumber]);
   });
 
   it("filters results by category", async () => {
-    const res = await request(app)
-      .get("/api/tickets")
-      .query({ categoryId })
-      .set("x-requester-id", String(requesterAId));
-
-    expect(res.status).toBe(200);
-    expect(
-      res.body.data.every((t: { categoryId: number }) => t.categoryId === categoryId)
-    ).toBe(true);
+    const res = await listAs(tokenA, { categoryId: softwareId });
+    expect(res.body.total).toBe(1);
+    expect(res.body.tickets[0].summary).toBe("Excel crashes on start");
   });
 
   it("filters results by requestedPriority", async () => {
-    await createTicket(requesterAId, { requestedPriority: "HIGH", summary: "High priority ticket" });
-
-    const res = await request(app)
-      .get("/api/tickets")
-      .query({ requestedPriority: "HIGH" })
-      .set("x-requester-id", String(requesterAId));
-
-    expect(res.status).toBe(200);
-    expect(
-      res.body.data.every((t: { requestedPriority: string }) => t.requestedPriority === "HIGH")
-    ).toBe(true);
+    const res = await listAs(tokenA, { priority: "HIGH" });
+    expect(res.body.total).toBe(1);
+    expect(res.body.tickets[0].requestedPriority).toBe("HIGH");
   });
 
   it("sorts results by createdAt descending by default", async () => {
-    const res = await request(app)
-      .get("/api/tickets")
-      .set("x-requester-id", String(requesterAId));
-
-    expect(res.status).toBe(200);
-    const dates = res.body.data.map((t: { createdAt: string }) => new Date(t.createdAt).getTime());
-    const sorted = [...dates].sort((a, b) => b - a);
-    expect(dates).toEqual(sorted);
+    const res = await listAs(tokenA, { pageSize: "50" });
+    const dates = res.body.tickets.map((t: any) => new Date(t.createdAt).getTime());
+    expect([...dates].sort((x, y) => y - x)).toEqual(dates);
   });
 
-  it("paginates results according to page and pageSize", async () => {
-    const res = await request(app)
-      .get("/api/tickets")
-      .query({ page: 1, pageSize: 10 })
-      .set("x-requester-id", String(requesterAId));
+  it("paginates with a default page size of 10 (BR-20)", async () => {
+    const page1 = await listAs(tokenA);
+    expect(page1.body.pageSize).toBe(10);
+    expect(page1.body.tickets).toHaveLength(10);
+    expect(page1.body.totalPages).toBe(2);
 
+    const page2 = await listAs(tokenA, { page: "2" });
+    expect(page2.body.tickets).toHaveLength(2);
+  });
+
+  it("falls back to defaults for an invalid page or pageSize (BR-20)", async () => {
+    const res = await listAs(tokenA, { page: "-3", pageSize: "7" });
     expect(res.status).toBe(200);
-    expect(res.body.data.length).toBeLessThanOrEqual(10);
-    expect(res.body.meta).toHaveProperty("totalItems");
-    expect(res.body.meta).toHaveProperty("totalPages");
-    expect(res.body.meta.pageSize).toBe(10);
+    expect(res.body.page).toBe(1);
+    expect(res.body.pageSize).toBe(10);
   });
 
   it("returns an empty list (not an error) when a requester has no tickets", async () => {
-    const prisma = getPrisma();
-    const emptyRequester = await prisma.devRequester.create({
-      data: { name: "Empty Test Requester", email: `empty-${Date.now()}@test.local`, isActive: true },
-    });
-
-    const res = await request(app)
-      .get("/api/tickets")
-      .set("x-requester-id", String(emptyRequester.id));
-
+    const res = await listAs(tokenB);
     expect(res.status).toBe(200);
-    expect(res.body.data).toEqual([]);
-    expect(res.body.meta.totalItems).toBe(0);
+    expect(res.body.tickets).toEqual([]);
+    expect(res.body.total).toBe(0);
   });
 });

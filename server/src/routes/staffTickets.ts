@@ -139,8 +139,10 @@ router.patch("/:id", authenticate, authorize(["IT_STAFF", "ADMIN"]), async (req:
       }
     }
 
-    const updated = await prisma.ticket.update({
-      where: { id },
+    // Atomic optimistic-concurrency write (BR-08): only succeeds if nobody changed the
+    // Ticket since we read it, so two simultaneous saves cannot both win.
+    const writeResult = await prisma.ticket.updateMany({
+      where: { id, version: ticket.version },
       data: {
         ...(ownerId !== undefined && { ownerId: ownerId || null }),
         ...(itPriority && { itPriority: itPriority as Priority }),
@@ -148,6 +150,18 @@ router.patch("/:id", authenticate, authorize(["IT_STAFF", "ADMIN"]), async (req:
         ...(resolutionSummary !== undefined && { resolutionSummary: String(resolutionSummary).trim() || null }),
         version: { increment: 1 },
       },
+    });
+
+    if (writeResult.count === 0) {
+      const current = await prisma.ticket.findUnique({ where: { id } });
+      return res.status(409).json({
+        error: "Conflict: Ticket was updated by another user. Refresh and retry.",
+        current,
+      });
+    }
+
+    const updated = await prisma.ticket.findUnique({
+      where: { id },
       include: {
         category: true,
         relatedSystem: true,
