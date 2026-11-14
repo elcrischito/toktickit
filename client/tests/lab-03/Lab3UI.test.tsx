@@ -22,6 +22,7 @@ describe("Lab 3 - Frontend Role-Based UI & Security Components", () => {
   it("UI-01: renders Login screen and displays error message on invalid credentials", async () => {
     global.fetch = vi.fn().mockResolvedValueOnce({
       ok: false,
+      headers: { get: () => "application/json" },
       text: async () => JSON.stringify({ error: "Invalid email or password" }),
     } as any);
 
