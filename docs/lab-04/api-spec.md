@@ -9,7 +9,7 @@ All endpoints require `Authorization: Bearer <JWT>` (`401 Unauthorized` if missi
 
 ## 2. Ticket Workflow & Concurrency Endpoints
 - **`PATCH /api/staff/tickets/:id`:** `IT_STAFF` or `ADMIN`. Validates transition matrix (**BR-06**), requires `resolutionSummary` when setting `RESOLVED` (`400`), and returns `409 Conflict` on stale `version`.
-- **`POST /api/tickets/:id/confirm-resolved`:** `REQUESTER` owner only. Appends advisory `PublicComment` without changing `ticket.status` (**BR-07**).
+- **`POST /api/tickets/:id/problem-resolved`:** `REQUESTER` owner only. Appends advisory `PublicComment` without changing `ticket.status` (**BR-07**).
 - **`POST /api/tickets/:id/reopen`:** `REQUESTER` owner (from `RESOLVED`) or `IT_STAFF`/`ADMIN` (from `RESOLVED`/`CLOSED`). Sets `status = REOPENED` and increments `version`.
 
 ## 3. Dashboard Endpoints

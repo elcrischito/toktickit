@@ -50,7 +50,7 @@ Extends Zen Green (`#1b4332` primary, `#52b788` accent, `#f8f9fa` background, `#
 - **Migration & Backfill:** Non-destructive Prisma migration (`add_lab4_actions_taken_and_version`); legacy Tickets default to `version = 1` and `0` Actions Taken; rollback drops `ActionTaken` and `Ticket.version`.
 
 ## 8. API Contract
-Defined in `docs/lab-04/api-spec.md`: `GET/POST /api/tickets/:id/actions`, `PATCH /api/tickets/:id/actions/:actionId`, `PATCH /api/staff/tickets/:id`, `POST /api/tickets/:id/confirm-resolved`, `POST /api/tickets/:id/reopen`, `GET /api/dashboard/staff`, `GET /api/dashboard/requester`.
+Defined in `docs/lab-04/api-spec.md`: `GET/POST /api/tickets/:id/actions`, `PATCH /api/tickets/:id/actions/:actionId`, `PATCH /api/staff/tickets/:id`, `POST /api/tickets/:id/problem-resolved`, `POST /api/tickets/:id/reopen`, `GET /api/dashboard/staff`, `GET /api/dashboard/requester`.
 
 ## 9. Acceptance Criteria
 - **AC-01:** Permitted `IT_STAFF`/`ADMIN` creates valid Action Taken with auto `performedById` and valid active assignee (`201 Created`).
@@ -65,11 +65,11 @@ Defined in `docs/lab-04/api-spec.md`: `GET/POST /api/tickets/:id/actions`, `PATC
 
 ## 10. Definition of Done
 - [ ] All Sprint 4 GitHub Issues in `Done` on Kanban board.
-- [ ] Feature branches merged into `lab4-staging` and then `main` via reviewed PRs.
-- [ ] `docs/lab-04/*` committed before implementation PR completion.
-- [ ] Prisma migration & idempotent seed verified without data loss.
-- [ ] All Lab 4 API, UI, E2E tests and Labs 1–3 regression tests pass.
-- [ ] Screenshots saved in `artifacts/lab-04/screenshots/` and final PDF (`Answer Part 1`..`Answer Part 9`) compiled.
+- [ ] Feature branches merged into `lab4-staging` and then `main` via reviewed PRs. *(Lab 4 branches were merged locally without a PR review; peer review is being done on the post-submission fix PR.)*
+- [x] `docs/lab-04/*` committed before implementation PR completion.
+- [x] Prisma migration & idempotent seed verified without data loss.
+- [x] All Lab 4 API, UI, E2E tests and Labs 1–3 regression tests pass (Labs 1–3 suites fixed after submission, see `docs/post-submission-fixes.md`).
+- [x] Screenshots saved in `docs/evidence/lab-04/` and final PDF (`docs/lab-04/TokTickIT-Lab4-Submission.pdf`) compiled.
 
 ## 11. Assumptions and Decisions
 - Authenticated users land on `/dashboard` by default after login (once `mustChangePassword` is false), with top-nav links to `/my-tickets`, `/queue`, `/create-ticket`, and `/admin/users`.
