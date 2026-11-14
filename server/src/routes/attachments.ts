@@ -2,31 +2,35 @@ import { Router, Response, NextFunction } from "express";
 import { PrismaClient } from "@prisma/client";
 import multer from "multer";
 import path from "path";
-import fs from "fs";
 import { authenticate, AuthRequest } from "../middleware/auth";
 
 // Lab 2 attachment lifecycle (BR-13..BR-18), re-wired onto the Lab 3 JWT session.
-// The old x-requester-id version lived in src/app.ts and was no longer mounted
-// after the Lab 3 switch to lab3App, so attachments silently stopped working.
+// Lab 5: file content is stored in PostgreSQL (Attachment.data), never on the
+// container disk, because Cloud Run starts a fresh container on every deploy.
 
 const prisma = new PrismaClient();
 
-export const UPLOAD_DIR = path.join(process.cwd(), "uploads");
 export const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"]; // BR-13
 export const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".pdf"]; // BR-13
 export const MAX_FILE_SIZE = 5 * 1024 * 1024; // BR-14
 export const MAX_ACTIVE_ATTACHMENTS = 5; // BR-15
 
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+// Metadata only: the (large) file bytes are loaded only by the download route.
+export const ATTACHMENT_METADATA = {
+  id: true,
+  ticketId: true,
+  filename: true,
+  originalName: true,
+  mimeType: true,
+  size: true,
+  isRemoved: true,
+  removedAt: true,
+  removedReason: true,
+  createdAt: true,
+} as const;
 
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
-    filename: (_req, file, cb) => {
-      const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-      cb(null, `${unique}${path.extname(file.originalname).toLowerCase()}`);
-    },
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: MAX_FILE_SIZE },
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
@@ -61,10 +65,6 @@ const toDto = (a: {
   removalReason: a.removedReason,
 });
 
-const removeTempFile = (file?: Express.Multer.File) => {
-  if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
-};
-
 // Runs multer and turns its errors into the error codes from docs/lab-02/api-spec.md
 const handleUpload = (req: AuthRequest, res: Response, next: NextFunction) => {
   upload.single("file")(req, res, (err: unknown) => {
@@ -93,6 +93,7 @@ ticketAttachmentsRouter.get("/:id/attachments", authenticate, async (req: AuthRe
     const attachments = await prisma.attachment.findMany({
       where: { ticketId: ticket.id },
       orderBy: { createdAt: "desc" },
+      select: ATTACHMENT_METADATA,
     });
     return res.json({ data: attachments.map(toDto) });
   } catch {
@@ -108,31 +109,31 @@ ticketAttachmentsRouter.post("/:id/attachments", authenticate, handleUpload, asy
   try {
     const ticket = await prisma.ticket.findUnique({ where: { id: req.params.id } });
     if (!ticket || ticket.requesterId !== req.user!.id) {
-      removeTempFile(req.file);
       return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found." } });
     }
 
     const activeCount = await prisma.attachment.count({ where: { ticketId: ticket.id, isRemoved: false } });
     if (activeCount >= MAX_ACTIVE_ATTACHMENTS) {
-      removeTempFile(req.file);
       return res.status(400).json({
         error: { code: "ATTACHMENT_LIMIT_REACHED", message: `A ticket can have at most ${MAX_ACTIVE_ATTACHMENTS} active attachments.` },
       });
     }
 
+    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(req.file.originalname).toLowerCase()}`;
     const created = await prisma.attachment.create({
       data: {
         ticketId: ticket.id,
-        filename: req.file.filename,
+        filename: unique,
         originalName: req.file.originalname,
         mimeType: req.file.mimetype,
         size: req.file.size,
-        path: req.file.filename,
+        path: "db", // content lives in the `data` column (Lab 5)
+        data: req.file.buffer,
       },
+      select: ATTACHMENT_METADATA,
     });
     return res.status(201).json({ data: toDto(created) });
   } catch {
-    removeTempFile(req.file);
     return res.status(500).json({ error: { code: "SERVER_ERROR", message: "Unable to upload attachment." } });
   }
 });
@@ -146,7 +147,7 @@ attachmentsRouter.get("/:id/download", authenticate, async (req: AuthRequest, re
   try {
     const attachment = await prisma.attachment.findUnique({
       where: { id: req.params.id },
-      include: { ticket: { select: { requesterId: true } } },
+      select: { ...ATTACHMENT_METADATA, data: true, ticket: { select: { requesterId: true } } },
     });
     if (!attachment || (!isStaffRole(req.user!.role) && attachment.ticket.requesterId !== req.user!.id)) {
       return res.status(404).json({ error: { code: "NOT_FOUND", message: "Attachment not found." } });
@@ -154,12 +155,14 @@ attachmentsRouter.get("/:id/download", authenticate, async (req: AuthRequest, re
     if (attachment.isRemoved) {
       return res.status(403).json({ error: { code: "ATTACHMENT_REMOVED", message: "This attachment has been removed." } });
     }
-    const filePath = path.join(UPLOAD_DIR, path.basename(attachment.filename));
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: { code: "FILE_MISSING", message: "File no longer exists on disk." } });
+    if (!attachment.data) {
+      // Rows uploaded before Lab 5 were stored on a local disk that no longer exists.
+      return res.status(404).json({ error: { code: "FILE_MISSING", message: "File content is not available." } });
     }
     res.setHeader("Content-Type", attachment.mimeType);
-    return res.download(filePath, attachment.originalName);
+    res.setHeader("Content-Length", String(attachment.data.length));
+    res.attachment(attachment.originalName);
+    return res.send(Buffer.from(attachment.data));
   } catch {
     return res.status(500).json({ error: { code: "SERVER_ERROR", message: "Unable to download attachment." } });
   }
@@ -176,7 +179,7 @@ attachmentsRouter.delete("/:id", authenticate, async (req: AuthRequest, res: Res
   try {
     const attachment = await prisma.attachment.findUnique({
       where: { id: req.params.id },
-      include: { ticket: { select: { requesterId: true } } },
+      select: { ...ATTACHMENT_METADATA, ticket: { select: { requesterId: true } } },
     });
     if (!attachment || attachment.ticket.requesterId !== req.user!.id) {
       return res.status(404).json({ error: { code: "NOT_FOUND", message: "Attachment not found." } });
@@ -187,6 +190,7 @@ attachmentsRouter.delete("/:id", authenticate, async (req: AuthRequest, res: Res
     const updated = await prisma.attachment.update({
       where: { id: attachment.id },
       data: { isRemoved: true, removedAt: new Date(), removedReason: reason },
+      select: ATTACHMENT_METADATA,
     });
     return res.json({
       data: { id: updated.id, isRemoved: true, removedAt: updated.removedAt, removalReason: updated.removedReason },
