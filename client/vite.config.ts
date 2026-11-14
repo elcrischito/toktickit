@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -12,5 +13,10 @@ export default defineConfig({
         secure: false,
       },
     },
+  },
+  test: {
+    // Only Vitest unit/UI tests here; Playwright specs in tests-e2e/ run with `npx playwright test`
+    include: ['tests/**/*.test.{ts,tsx}'],
+    environment: 'jsdom',
   },
 })

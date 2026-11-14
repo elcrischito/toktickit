@@ -119,11 +119,11 @@ test.describe.serial("Lab 4 E2E - Dashboards, Actions Taken & Ticket Lifecycle",
     await expect(page.getByText(/Internal Notes/i)).toHaveCount(0);
 
     await page.getByRole("link", { name: /My Tickets/i }).click();
-    await page.locator("select").selectOption("RESOLVED");
+    // My Tickets now has several filters (status, category, priority), so target the Status one
+    await page.getByLabel("Status", { exact: true }).selectOption("RESOLVED");
     const resolvedRows = page.locator("table tbody tr");
-    const count = await resolvedRows.count();
-    const firstCellText = await resolvedRows.first().innerText();
-    if (count > 0 && !firstCellText.includes("no tickets matching")) {
+    await expect(resolvedRows.first().or(page.getByText(/No tickets match your search or filters/i))).toBeVisible();
+    if ((await resolvedRows.count()) > 0) {
       await resolvedRows.first().click();
       const reopenBtn = page.getByRole("button", { name: /Reopen Ticket/i });
       if (await reopenBtn.isVisible()) {
