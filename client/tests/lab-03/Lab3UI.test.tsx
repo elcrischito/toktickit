@@ -23,6 +23,7 @@ describe("Lab 3 - Frontend Role-Based UI & Security Components", () => {
     global.fetch = vi.fn().mockResolvedValueOnce({
       ok: false,
       headers: { get: () => "application/json" },
+      json: async () => ({ error: "Invalid email or password" }),
       text: async () => JSON.stringify({ error: "Invalid email or password" }),
     } as any);
 
