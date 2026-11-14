@@ -75,7 +75,7 @@ describe("Lab 4 UI - IT Staff & Admin Dashboard (UI-01, FR-06)", () => {
 
     await waitFor(() => {
       expect(screen.getByText(/IT Staff Operations Dashboard/i)).toBeInTheDocument();
-      expect(screen.getByText("TKT-2026-001234")).toBeInTheDocument();
+      expect(screen.getAllByText("TKT-2026-001234").length).toBeGreaterThanOrEqual(2);
       expect(screen.getByText(/Ran powercfg diagnostic/i)).toBeInTheDocument();
     });
 
