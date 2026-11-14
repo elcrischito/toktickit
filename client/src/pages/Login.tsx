@@ -38,7 +38,7 @@ export const Login: React.FC = () => {
 
   return (
     <div style={{ maxWidth: 400, margin: "80px auto", padding: 24, border: "1px solid #e9ecef", borderRadius: 8, backgroundColor: "#ffffff" }}>
-      <h2 style={{ color: "#1b4332", textAlign: "center", marginBottom: 24 }}>TikTockIT — Sign In</h2>
+      <h2 style={{ color: "#1b4332", textAlign: "center", marginBottom: 24 }}>TokTickIT — Sign In</h2>
       {error && <div style={{ color: "#d90429", padding: 10, backgroundColor: "#f8d7da", borderRadius: 4, marginBottom: 16 }}>{error}</div>}
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: 16 }}>

@@ -8,8 +8,15 @@ const prisma = new PrismaClient();
 // GET /api/tickets
 router.get("/", authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { search, status, priority } = req.query;
+    const { search, status, priority, categoryId } = req.query;
     const where: any = {};
+
+    // BR-20 (Lab 2): default 10 per page, allowed sizes 10/25/50, invalid values fall back to defaults
+    const ALLOWED_PAGE_SIZES = [10, 25, 50];
+    const requestedSize = parseInt(String(req.query.pageSize ?? ""), 10);
+    const pageSize = ALLOWED_PAGE_SIZES.includes(requestedSize) ? requestedSize : 10;
+    const requestedPage = parseInt(String(req.query.page ?? ""), 10);
+    const page = Number.isInteger(requestedPage) && requestedPage >= 1 ? requestedPage : 1;
 
     if (req.user!.role === "REQUESTER") {
       where.requesterId = req.user!.id;
@@ -29,20 +36,32 @@ router.get("/", authenticate, async (req: AuthRequest, res: Response) => {
       }
     }
     if (priority) where.requestedPriority = String(priority);
+    if (categoryId) where.categoryId = String(categoryId);
 
-    const tickets = await prisma.ticket.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      include: {
-        category: true,
-        relatedSystem: true,
-        requester: { select: { id: true, fullName: true, email: true } },
-        owner: { select: { id: true, fullName: true, email: true } },
-        _count: { select: { actionsTaken: true } },
-      },
+    const [tickets, total] = await Promise.all([
+      prisma.ticket.findMany({
+        where,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          category: true,
+          relatedSystem: true,
+          requester: { select: { id: true, fullName: true, email: true } },
+          owner: { select: { id: true, fullName: true, email: true } },
+          _count: { select: { actionsTaken: true } },
+        },
+      }),
+      prisma.ticket.count({ where }),
+    ]);
+
+    return res.json({
+      tickets,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
     });
-
-    return res.json({ tickets });
   } catch {
     return res.status(500).json({ error: "Failed to load tickets" });
   }
