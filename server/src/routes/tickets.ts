@@ -1,6 +1,7 @@
 import { Router, Response } from "express";
 import { PrismaClient, Priority } from "@prisma/client";
 import { authenticate, AuthRequest } from "../middleware/auth";
+import { ATTACHMENT_METADATA } from "./attachments";
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -128,7 +129,7 @@ router.get("/:id", authenticate, async (req: AuthRequest, res: Response) => {
         relatedSystem: true,
         requester: { select: { id: true, fullName: true, email: true } },
         owner: { select: { id: true, fullName: true, email: true } },
-        attachments: { where: { isRemoved: false } },
+        attachments: { where: { isRemoved: false }, select: ATTACHMENT_METADATA },
       },
     });
 

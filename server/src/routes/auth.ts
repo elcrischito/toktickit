@@ -3,10 +3,10 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { PrismaClient } from "@prisma/client";
 import { authenticate, AuthRequest } from "../middleware/auth";
+import { getJwtSecret } from "../config";
 
 const router = Router();
 const prisma = new PrismaClient();
-const JWT_SECRET = process.env.JWT_SECRET || "lab3_secret_key";
 
 router.post("/login", async (req, res) => {
   const { email, password } = req.body;
@@ -26,7 +26,7 @@ router.post("/login", async (req, res) => {
 
   const token = jwt.sign(
     { id: user.id, email: user.email, role: user.role, mustChangePassword: user.mustChangePassword },
-    JWT_SECRET,
+    getJwtSecret(),
     { expiresIn: "1d" }
   );
 

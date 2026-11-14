@@ -131,6 +131,8 @@ model Attachment {
   mimeType      String
   size          Int
   path          String
+  // Lab 5: file content kept in PostgreSQL so it survives Cloud Run redeploys
+  data          Bytes?
   isRemoved     Boolean   @default(false)
   removedAt     DateTime?
   removedReason String?

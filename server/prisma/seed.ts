@@ -3,9 +3,29 @@ import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
+// Lab 5 (Student Guide Episode 2, point 2): the seed is safe for production.
+// - Passwords come from environment variables, never from code. The local fallback
+//   "Password123!" is only used outside production (local dev, tests, CI).
+// - Reference data and the first administrator are always created.
+// - Demo users and sample tickets (needed for the Lab 6 UAT) only when SEED_DEMO_DATA=true.
+//   Default: on locally, off in production.
+// - Safe to rerun: in production an existing admin keeps its current password.
+const isProduction = process.env.NODE_ENV === "production";
+const LOCAL_FALLBACK_PASSWORD = "Password123!";
+
+function passwordFromEnv(name: string): string {
+  const value = process.env[name];
+  if (value && value.length > 0) return value;
+  if (isProduction) throw new Error(`${name} must be set when NODE_ENV=production`);
+  return LOCAL_FALLBACK_PASSWORD;
+}
+
+const seedDemoData = process.env.SEED_DEMO_DATA !== undefined
+  ? process.env.SEED_DEMO_DATA === "true"
+  : !isProduction;
+
 async function main() {
-  console.log("Seeding Lab 3 & Lab 4 idempotent data...");
-  const defaultPasswordHash = await bcrypt.hash("Password123!", 10);
+  console.log(`Seeding TokTickIT (production=${isProduction}, demo data=${seedDemoData})...`);
 
   const categories = [];
   for (const name of ["Account and Access", "Hardware", "Software", "Network"]) {
@@ -17,11 +37,21 @@ async function main() {
     systems.push(await prisma.relatedSystem.upsert({ where: { name }, update: {}, create: { name } }));
   }
 
+  const adminPasswordHash = await bcrypt.hash(passwordFromEnv("ADMIN_PASSWORD"), 10);
   await prisma.user.upsert({
     where: { email: "admin@toktickit.com" },
-    update: { passwordHash: defaultPasswordHash, isActive: true, mustChangePassword: true },
-    create: { email: "admin@toktickit.com", fullName: "John Smith (Admin)", passwordHash: defaultPasswordHash, role: Role.ADMIN, isActive: true, mustChangePassword: true },
+    // Locally the admin is reset on every seed (tests rely on it). In production a
+    // rerun (every release runs the migration job) must not undo the admin's password change.
+    update: isProduction ? {} : { passwordHash: adminPasswordHash, isActive: true, mustChangePassword: true },
+    create: { email: "admin@toktickit.com", fullName: "John Smith (Admin)", passwordHash: adminPasswordHash, role: Role.ADMIN, isActive: true, mustChangePassword: true },
   });
+
+  if (!seedDemoData) {
+    console.log("Reference data and administrator seeded (demo data skipped).");
+    return;
+  }
+
+  const defaultPasswordHash = await bcrypt.hash(passwordFromEnv("DEMO_USER_PASSWORD"), 10);
 
   const staff1 = await prisma.user.upsert({
     where: { email: "michael.brown@toktickit.com" },

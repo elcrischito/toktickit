@@ -2,10 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import bcrypt from "bcryptjs";
 import { PrismaClient, Role } from "@prisma/client";
-import fs from "fs";
-import path from "path";
 import { lab3App } from "../../src/lab3App";
-import { UPLOAD_DIR } from "../../src/routes/attachments";
 
 // Lab 2 Ticket Detail + Attachment lifecycle (BR-13..BR-18), migrated to the Lab 3
 // JWT session and the restored /api/tickets/:id/attachments + /api/attachments routes.
@@ -63,9 +60,6 @@ beforeAll(async () => {
 afterAll(async () => {
   const users = await prisma.user.findMany({ where: { email: { in: [emailA, emailB] } } });
   const ids = users.map((u) => u.id);
-  // remove the test files written to server/uploads
-  const files = await prisma.attachment.findMany({ where: { ticket: { requesterId: { in: ids } } } });
-  for (const f of files) fs.rmSync(path.join(UPLOAD_DIR, f.filename), { force: true });
   await prisma.ticket.deleteMany({ where: { requesterId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
   await prisma.$disconnect();
@@ -129,6 +123,16 @@ describe("POST /api/tickets/:id/attachments (Upload)", () => {
     expect(res.body.data).toMatchObject({ ticketId, fileName: "screenshot.png", mimeType: "image/png", isRemoved: false });
   });
 
+  it("stores the file content in the database, not on the container disk (Lab 5, R-04)", async () => {
+    const row = await prisma.attachment.findFirstOrThrow({ where: { ticketId, originalName: "screenshot.png" } });
+    expect(row.path).toBe("db");
+    expect(Buffer.from(row.data!).equals(PNG)).toBe(true);
+
+    // the Ticket Detail JSON only carries metadata, never the file bytes
+    const detail = await request(lab3App).get(`/api/tickets/${ticketId}`).set(auth(tokenA));
+    expect(detail.body.attachments[0]).not.toHaveProperty("data");
+  });
+
   it("rejects an upload from a non-owning requester (BR-18)", async () => {
     const res = await upload(tokenB, ticketId, PNG, "intruder.png", "image/png");
     expect(res.status).toBe(404);
@@ -160,8 +164,17 @@ describe("Attachment download and soft removal (BR-16, BR-17)", () => {
   });
 
   it("downloads an attachment for the owning requester and for IT Staff", async () => {
-    const owner = await request(lab3App).get(`/api/attachments/${attachmentId}/download`).set(auth(tokenA));
+    const owner = await request(lab3App)
+      .get(`/api/attachments/${attachmentId}/download`)
+      .set(auth(tokenA))
+      .buffer(true)
+      .parse((res, cb) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (c: Buffer) => chunks.push(c));
+        res.on("end", () => cb(null, Buffer.concat(chunks)));
+      });
     expect(owner.status).toBe(200);
+    expect(Buffer.compare(owner.body, PNG)).toBe(0);
     expect(owner.headers["content-type"]).toContain("image/png");
     expect(owner.headers["content-disposition"]).toContain("screenshot.png");
 
