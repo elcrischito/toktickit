@@ -1,10 +1,9 @@
-# Sprint 3 AI Usage Log — TokTickIT
+# Sprint 3 AI Assistance Disclosure — TokTickIT
 
-- **LLM Used:** Gemini / Claude (Specification & Coding Agent)
-- **Key Prompts:**
-  1. Generate Sprint 3 engineering specification based on Lab 3 handout.
-  2. Define REST API contract for authentication and IT Staff queue.
-  3. Create test plan mapping Acceptance Criteria to test files.
-
-## My Reflection
-Using the AI as a specification agent made structuring the data models and API endpoints efficient before writing code.
+- **Tools Used**: LLM Coding Assistant (Gemini)
+- **Areas Assisted**:
+  - Drafting boilerplate Express route handlers and Prisma queries for authentication, staff ticket triage, public comments, internal notes, and admin user lifecycle management.
+  - Structuring React + TypeScript components (`TicketDetail`, `StaffQueue`, `UserManagement`, `RequesterTickets`) following the Zen Green design palette.
+  - Generating Vitest + Supertest API test suites, React Testing Library component tests, and Playwright screenshot automation scripts.
+- **Human Verification & Ownership**:
+  - All generated code, database schemas, security middleware rules (BR-01 through BR-08), and test assertions were reviewed, executed against local PostgreSQL, and verified manually and automatically by the developer.

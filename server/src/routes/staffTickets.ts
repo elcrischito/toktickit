@@ -5,12 +5,29 @@ import { authenticate, authorize, AuthRequest } from "../middleware/auth";
 const router = Router();
 const prisma = new PrismaClient();
 
+// GET /api/staff/tickets/agents - Liste des membres IT_STAFF et ADMIN actifs pour assignation
+router.get("/agents", authenticate, authorize(["IT_STAFF", "ADMIN"]), async (_req: AuthRequest, res: Response) => {
+  try {
+    const agents = await prisma.user.findMany({
+      where: {
+        isActive: true,
+        role: { in: ["IT_STAFF", "ADMIN"] },
+      },
+      select: { id: true, fullName: true, email: true, role: true },
+      orderBy: { fullName: "asc" },
+    });
+    return res.json(agents);
+  } catch {
+    return res.status(500).json({ error: "Failed to load IT agents" });
+  }
+});
+
 // GET /api/staff/tickets - Recherche, filtres, tri et pagination
 router.get("/", authenticate, authorize(["IT_STAFF", "ADMIN"]), async (req: AuthRequest, res: Response) => {
   try {
     const { search, status, priority, page = "1", limit = "10" } = req.query;
-    const pageNum = parseInt(page as string, 10);
-    const limitNum = parseInt(limit as string, 10);
+    const pageNum = parseInt(page as string, 10) || 1;
+    const limitNum = parseInt(limit as string, 10) || 10;
     const skip = (pageNum - 1) * limitNum;
 
     const where: any = {};
@@ -47,7 +64,7 @@ router.get("/", authenticate, authorize(["IT_STAFF", "ADMIN"]), async (req: Auth
       page: pageNum,
       totalPages: Math.ceil(total / limitNum),
     });
-  } catch (error) {
+  } catch {
     return res.status(500).json({ error: "Failed to fetch ticket queue" });
   }
 });
@@ -64,7 +81,7 @@ router.patch("/:id", authenticate, authorize(["IT_STAFF", "ADMIN"]), async (req:
     const updated = await prisma.ticket.update({
       where: { id },
       data: {
-        ...(ownerId !== undefined && { ownerId }),
+        ...(ownerId !== undefined && { ownerId: ownerId || null }),
         ...(itPriority && { itPriority: itPriority as Priority }),
         ...(status && { status: status as Status }),
         ...(resolutionSummary !== undefined && { resolutionSummary }),
@@ -78,7 +95,7 @@ router.patch("/:id", authenticate, authorize(["IT_STAFF", "ADMIN"]), async (req:
     });
 
     return res.json(updated);
-  } catch (error) {
+  } catch {
     return res.status(500).json({ error: "Failed to update ticket" });
   }
 });

@@ -1,7 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 
-export const StaffQueue: React.FC = () => {
+interface StaffQueueProps {
+  onSelectTicket?: (id: string) => void;
+}
+
+export const StaffQueue: React.FC<StaffQueueProps> = ({ onSelectTicket }) => {
   const { token } = useAuth();
   const [tickets, setTickets] = useState<any[]>([]);
   const [search, setSearch] = useState("");
@@ -32,21 +36,21 @@ export const StaffQueue: React.FC = () => {
   return (
     <div style={{ padding: 24, maxWidth: 1200, margin: "0 auto" }}>
       <h2 style={{ color: "#1b4332", marginBottom: 20 }}>IT Staff Ticket Queue</h2>
-      
-      {/* Search and Filters */}
-      <div style={{ display: "flex", gap: 16, marginBottom: 20 }}>
+
+      <div style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
         <input
           type="text"
           placeholder="Search ticket # or summary..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          style={{ flex: 1, padding: 10, borderRadius: 4, border: "1px solid #ccc" }}
+          style={{ flex: 1, minWidth: 220, padding: 10, borderRadius: 4, border: "1px solid #ccc" }}
         />
         <select value={status} onChange={(e) => setStatus(e.target.value)} style={{ padding: 10, borderRadius: 4, border: "1px solid #ccc" }}>
           <option value="">All Statuses</option>
           <option value="NEW">New</option>
           <option value="OPEN">Open</option>
           <option value="IN_PROGRESS">In Progress</option>
+          <option value="WAITING_FOR_REQUESTER">Waiting for Requester</option>
           <option value="RESOLVED">Resolved</option>
           <option value="CLOSED">Closed</option>
         </select>
@@ -58,7 +62,6 @@ export const StaffQueue: React.FC = () => {
         </select>
       </div>
 
-      {/* Ticket Table */}
       {loading ? (
         <p>Loading queue...</p>
       ) : (
@@ -79,8 +82,12 @@ export const StaffQueue: React.FC = () => {
               <tr><td colSpan={7} style={{ padding: 20, textAlign: "center", color: "#6c757d" }}>No tickets found</td></tr>
             ) : (
               tickets.map((t) => (
-                <tr key={t.id} style={{ borderBottom: "1px solid #e9ecef" }}>
-                  <td style={{ padding: 12, fontWeight: "bold", color: "#1b4332" }}>{t.ticketNumber}</td>
+                <tr
+                  key={t.id}
+                  onClick={() => onSelectTicket && onSelectTicket(t.id)}
+                  style={{ borderBottom: "1px solid #e9ecef", cursor: "pointer" }}
+                >
+                  <td style={{ padding: 12, fontWeight: "bold", color: "#1b4332", textDecoration: "underline" }}>{t.ticketNumber}</td>
                   <td style={{ padding: 12 }}>{t.summary}</td>
                   <td style={{ padding: 12 }}>{t.category?.name}</td>
                   <td style={{ padding: 12 }}>
