@@ -1,77 +1,44 @@
 # TokTickIT
 
-TokTickIT is an IT service desk application for Account and Access, Hardware, Software, and Network requests.
+TokTickIT is an IT service desk application for **Account and Access**, **Hardware**, **Software**, and **Network** requests.
 
-This repository contains the Lab 1 full-stack vertical slice: a React frontend, an Express/TypeScript backend, and a PostgreSQL database managed with Prisma.
+This repository contains the full-stack implementation through **Lab 3**:
+- **Frontend**: React + TypeScript + Vite + Bootstrap (Zen Green design system)
+- **Backend**: Node.js + Express + TypeScript (REST API + JWT authentication & RBAC)
+- **Database**: PostgreSQL + Prisma ORM
+- **Testing**: Vitest + Supertest + Playwright
 
-## Tech Stack
-
-- **Frontend:** React + TypeScript + Vite + Bootstrap
-- **Backend:** Node.js + Express + TypeScript
-- **Database:** PostgreSQL + Prisma ORM
-- **Testing:** Vitest (frontend) + Supertest (backend)
+## Roles & Features (Lab 3)
+- **Authentication**: Email/password login (`POST /api/auth/login`), bcrypt password hashing, JWT bearer tokens, mandatory initial password change (`POST /api/auth/change-password`), and session inspection (`GET /api/auth/me`).
+- **Requester (`REQUESTER`)**: Create tickets with attachments, view/filter/sort own tickets, add public comments, and mark issues as resolved.
+- **IT Staff (`IT_STAFF`)**: Access the global IT Staff ticket queue (`GET /api/staff/tickets`), update status/IT priority/owner (`PATCH /api/staff/tickets/:id`), and post append-only **Internal Notes** hidden from requesters.
+- **Administrator (`ADMIN`)**: Full IT Staff capabilities plus user lifecycle management (`GET/POST/PATCH /api/admin/users` and password resets), enforcing safety rules against self-deactivation or removing the last active admin.
 
 ## Project Structure
+- `client/` — React + Vite frontend
+- `server/` — Express backend, Prisma schema/migrations/seed, API tests
+- `docs/lab-01/`, `docs/lab-02/`, `docs/lab-03/` — Engineering specs, API/UI contracts, test plans, reviewer & AI logs
 
-    toktickit/
-    ├── client/          # React frontend
-    ├── server/          # Express backend + Prisma
-    │   ├── prisma/      # Prisma schema, migrations, seed
-    │   ├── src/         # Backend source code
-    │   └── tests/       # Backend tests
-    ├── docs/lab-01/     # Lab 1 documentation
-    └── .gitignore
+## Setup & Run Locally
 
-## Prerequisites
+### 1. Database (PostgreSQL)
+Start the PostgreSQL container (if using Docker) or ensure PostgreSQL is running on `localhost:5432`:
+`docker start toktickit-db`
 
-- Node.js (LTS)
-- PostgreSQL running locally
-- npm
+### 2. Backend Setup
+`cd server && npm install && npx prisma migrate deploy && npx prisma db seed && npm run dev`
+(API runs on `http://localhost:5000`)
 
-## Setup
+### 3. Frontend Setup
+`cd client && npm install && npm run dev`
+(App runs on `http://localhost:5173`)
 
-### 1. Clone the repository
-
-    git clone https://github.com/elcrischito/toktickit.git
-    cd toktickit
-
-### 2. Backend setup
-
-    cd server
-    npm install
-    cp .env.example .env
-    npx prisma migrate dev
-    npx prisma db seed
-    npm run dev
-
-The backend runs on `http://localhost:4000` by default.
-
-### 3. Frontend setup
-
-Open a new terminal:
-
-    cd client
-    npm install
-    cp .env.example .env
-    npm run dev
-
-The frontend runs on `http://localhost:5173` by default (Vite default port).
+## Seeded Test Accounts
+Default password for all test accounts: `Password123!`
+- **Admin**: `admin@toktickit.com` (forces password change on first login)
+- **IT Staff**: `michael.brown@toktickit.com`
+- **Requester**: `jennifer.anderson@toktickit.com`
 
 ## Running Tests
-
-### Backend tests
-
-    cd server
-    npm test
-
-### Frontend tests
-
-    cd client
-    npm test
-
-## Usage
-
-1. Start the backend server (`server/`)
-2. Start the frontend dev server (`client/`)
-3. Open the frontend in your browser
-4. Click **Check System** to verify the backend health and view the supported request categories
+`cd server && npm test`
+`cd client && npm test`
