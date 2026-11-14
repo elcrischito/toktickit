@@ -20,12 +20,17 @@ export const Login: React.FC = () => {
         body: JSON.stringify({ email, password }),
       });
 
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Impossible de contacter le serveur backend. Vérifie qu'il tourne sur le port 5000.");
+      }
+
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Login failed");
 
       login(data);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || "An unexpected error occurred");
     } finally {
       setLoading(false);
     }
